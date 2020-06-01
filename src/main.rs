@@ -40,10 +40,10 @@ fn wrapped_load_data(sink: ExtEventSink, input: InputSource, num_bins: usize) {
 struct AppState {
     loaded: bool,
     labels_and_counts: Vec<(String, usize)>,
-    p_25: Option<f32>,
-    p_50: Option<f32>,
-    p_75: Option<f32>,
-    total: f32,
+    p_25: Option<f64>,
+    p_50: Option<f64>,
+    p_75: Option<f64>,
+    total: f64,
     highlight: Option<usize>,
 }
 
@@ -92,6 +92,7 @@ impl AppDelegate<AppState> for Delegate {
             data.p_50 = histogram_data.p_50;
             data.p_75 = histogram_data.p_75;
             data.total = histogram_data.total;
+            data.highlight = None;
         }
         true
     }

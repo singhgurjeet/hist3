@@ -3,15 +3,26 @@ use crate::styles::*;
 
 use druid::widget::prelude::*;
 use druid::{Point, Rect};
+use druid::kurbo::Line;
 
 pub struct Histogram {}
 
 impl Widget<AppState> for Histogram {
-    fn event(&mut self, _ctx: &mut EventCtx, _event: &Event, _data: &mut AppState, _env: &Env) {}
+    fn event(&mut self, ctx: &mut EventCtx, event: &Event, data: &mut AppState, _env: &Env) {
+        match event {
+            Event::MouseMove(e) => {
+                let width = ctx.size().width;
+                data.highlight = Some(((data.labels_and_counts.len() as f64) * e.pos.x/width) as usize);
+            }
+            _ => {}
+        }
+    }
 
     fn lifecycle(&mut self, _ctx: &mut LifeCycleCtx, _event: &LifeCycle, _data: &AppState, _env: &Env) {}
 
-    fn update(&mut self, _ctx: &mut UpdateCtx, _old_data: &AppState, _data: &AppState, _env: &Env) {}
+    fn update(&mut self, ctx: &mut UpdateCtx, _old_data: &AppState, _data: &AppState, _env: &Env) {
+        ctx.request_paint();
+    }
 
     fn layout(&mut self, _layout_ctx: &mut LayoutCtx, bc: &BoxConstraints, _data: &AppState, _env: &Env) -> Size {
         // BoxConstraints are passed by the parent widget.
@@ -41,11 +52,26 @@ impl Widget<AppState> for Histogram {
 
         let rect = Rect::from_origin_size(Point::ORIGIN, size);
         ctx.fill(rect, &DARK_GREY);
+
+        if let Some(p) = data.p_25 {
+            ctx.stroke(Line::new(Point::new(p*width, 0.0), Point::new(p*width, height)), &LIGHT_GREY, 0.5);
+        }
+        if let Some(p) = data.p_50 {
+            ctx.stroke(Line::new(Point::new(p*width, 0.0), Point::new(p*width, height)), &LIGHT_GREY, 0.5);
+        }
+        if let Some(p) = data.p_75 {
+            ctx.stroke(Line::new(Point::new(p*width, 0.0), Point::new(p*width, height)), &LIGHT_GREY, 0.5);
+        }
+
         data.labels_and_counts.iter().enumerate().for_each(|(i, (_, c))| {
             let r = Rect::from_origin_size(
                 Point::new((i as f64) * bar_width, height - (*c as f64) * height_per_count),
                 Size::new(bar_width, (*c as f64) * height_per_count));
-            ctx.fill(r, &BAR_COLOR);
+            if data.highlight == Some(i) {
+                ctx.fill(r, &HIGHLIGHT_BAR_COLOR);
+            } else {
+                ctx.fill(r, &BAR_COLOR);
+            }
             ctx.stroke(r, &DARK_GREY, 0.25);
         });
     }
