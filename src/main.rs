@@ -2,13 +2,16 @@
 extern crate clap;
 
 mod data;
-mod styles;
 mod histogram_widget;
+mod styles;
 
-use druid::widget::prelude::*;
-use druid::{AppLauncher, LocalizedString, WindowDesc, Data, Command, ExtEventSink, Selector, AppDelegate, DelegateCtx, Target};
-use druid::widget::{Label, Either, Align};
 use atty::Stream;
+use druid::widget::prelude::*;
+use druid::widget::{Align, Either, Label};
+use druid::{
+    AppDelegate, AppLauncher, Command, Data, DelegateCtx, ExtEventSink, LocalizedString, Selector,
+    Target, WindowDesc,
+};
 use std::thread;
 
 const LOAD_DATA: Selector<(InputSource, usize)> = Selector::new("load_data");
@@ -17,22 +20,27 @@ const LOADED: Selector<AppState> = Selector::new("loaded_data");
 #[derive(Clone)]
 pub enum InputSource {
     FileName(String),
-    Stdin
+    Stdin,
 }
 
 fn wrapped_load_data(sink: ExtEventSink, input: InputSource, num_bins: usize) {
     thread::spawn(move || {
-        let (labels_and_counts, p_25, p_50, p_75, total) = data::compute_histogram(
-            num_bins, input);
+        let (labels_and_counts, p_25, p_50, p_75, total) = data::compute_histogram(num_bins, input);
 
-        sink.submit_command(LOADED, AppState {
+        sink.submit_command(
+            LOADED,
+            AppState {
                 loaded: true,
                 labels_and_counts,
                 p_25,
                 p_50,
                 p_75,
                 total,
-                highlight: None}, None).expect("command failed to submit");
+                highlight: None,
+            },
+            None,
+        )
+        .expect("command failed to submit");
     });
 }
 
@@ -49,15 +57,17 @@ struct AppState {
 
 impl Data for AppState {
     fn same(&self, other: &Self) -> bool {
-        self.loaded.eq(&other.loaded) &&
-        self.p_25.eq(&other.p_25) &&
-            self.p_50.eq(&other.p_50) &&
-            self.p_75.eq(&other.p_75) &&
-            self.total.eq(&other.total) &&
-            self.highlight.eq(&other.highlight) &&
-            self.labels_and_counts.iter().
-                zip(other.labels_and_counts.iter())
-                .all(|((s, i),(os, oi))| s.eq(os) && i.eq(oi))
+        self.loaded.eq(&other.loaded)
+            && self.p_25.eq(&other.p_25)
+            && self.p_50.eq(&other.p_50)
+            && self.p_75.eq(&other.p_75)
+            && self.total.eq(&other.total)
+            && self.highlight.eq(&other.highlight)
+            && self
+                .labels_and_counts
+                .iter()
+                .zip(other.labels_and_counts.iter())
+                .all(|((s, i), (os, oi))| s.eq(os) && i.eq(oi))
     }
 }
 
@@ -67,9 +77,10 @@ struct Delegate {
 
 impl Delegate {
     fn new(eventsink: ExtEventSink, input: InputSource, num_bins: usize) -> Self {
-        eventsink.submit_command(LOAD_DATA, (input, num_bins), None)
+        eventsink
+            .submit_command(LOAD_DATA, (input, num_bins), None)
             .expect("Could not load data");
-        Delegate {eventsink}
+        Delegate { eventsink }
     }
 }
 
@@ -101,9 +112,13 @@ impl AppDelegate<AppState> for Delegate {
 fn build_main_window() -> impl Widget<AppState> {
     let text = LocalizedString::new("Loading...");
     let loading_text = Label::new(text);
-    let histogram = histogram_widget::Histogram{};
+    let histogram = histogram_widget::Histogram {};
 
-    let either = Either::new(|data: &AppState, _env| !data.loaded, loading_text, histogram);
+    let either = Either::new(
+        |data: &AppState, _env| !data.loaded,
+        loading_text,
+        histogram,
+    );
 
     Align::centered(either)
 }
@@ -120,11 +135,18 @@ pub fn main() {
     } else {
         InputSource::FileName(matches.value_of("INPUT").expect("No input").to_owned())
     };
-    let num_bins = matches.value_of("BINS").unwrap_or("20").parse::<usize>().unwrap();
+    let num_bins = matches
+        .value_of("BINS")
+        .unwrap_or("20")
+        .parse::<usize>()
+        .unwrap();
 
     let main_window = WindowDesc::new(build_main_window)
         .title(LocalizedString::new("Blocking functions"))
-        .window_size(Size{width: 800.0, height: 600.0});
+        .window_size(Size {
+            width: 800.0,
+            height: 600.0,
+        });
     let app = AppLauncher::with_window(main_window);
     let delegate = Delegate::new(app.get_external_handle(), input, num_bins);
 

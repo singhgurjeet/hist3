@@ -1,10 +1,10 @@
-use crate::AppState;
 use crate::styles::*;
+use crate::AppState;
 
-use druid::widget::prelude::*;
-use druid::{Point, Rect};
 use druid::kurbo::Line;
 use druid::piet::{FontBuilder, Text, TextLayoutBuilder};
+use druid::widget::prelude::*;
+use druid::{Point, Rect};
 
 pub struct Histogram {}
 
@@ -13,19 +13,33 @@ impl Widget<AppState> for Histogram {
         match event {
             Event::MouseMove(e) => {
                 let width = ctx.size().width;
-                data.highlight = Some(((data.labels_and_counts.len() as f64) * e.pos.x/width) as usize);
+                data.highlight =
+                    Some(((data.labels_and_counts.len() as f64) * e.pos.x / width) as usize);
             }
             _ => {}
         }
     }
 
-    fn lifecycle(&mut self, _ctx: &mut LifeCycleCtx, _event: &LifeCycle, _data: &AppState, _env: &Env) {}
+    fn lifecycle(
+        &mut self,
+        _ctx: &mut LifeCycleCtx,
+        _event: &LifeCycle,
+        _data: &AppState,
+        _env: &Env,
+    ) {
+    }
 
     fn update(&mut self, ctx: &mut UpdateCtx, _old_data: &AppState, _data: &AppState, _env: &Env) {
         ctx.request_paint();
     }
 
-    fn layout(&mut self, _layout_ctx: &mut LayoutCtx, bc: &BoxConstraints, _data: &AppState, _env: &Env) -> Size {
+    fn layout(
+        &mut self,
+        _layout_ctx: &mut LayoutCtx,
+        bc: &BoxConstraints,
+        _data: &AppState,
+        _env: &Env,
+    ) -> Size {
         // BoxConstraints are passed by the parent widget.
         // This method can return any Size within those constraints:
         // bc.constrain(my_size)
@@ -46,47 +60,92 @@ impl Widget<AppState> for Histogram {
         let height = size.height;
         let num_bins = data.labels_and_counts.len() as f64;
         let bar_width = width / num_bins;
-        let max_count = data.labels_and_counts.iter()
+        let max_count = data
+            .labels_and_counts
+            .iter()
             .map(|(_, i)| i)
-            .max_by(|x, y| x.cmp(y)).unwrap_or(&(0 as usize));
+            .max_by(|x, y| x.cmp(y))
+            .unwrap_or(&(0 as usize));
         let height_per_count = height / (*max_count as f64);
 
         let rect = Rect::from_origin_size(Point::ORIGIN, size);
         ctx.fill(rect, &DARK_GREY);
 
         if let Some(p) = data.p_25 {
-            ctx.stroke(Line::new(Point::new(p*width, 0.0), Point::new(p*width, height)), &LIGHT_GREY, 0.5);
+            ctx.stroke(
+                Line::new(Point::new(p * width, 0.0), Point::new(p * width, height)),
+                &LIGHT_GREY,
+                0.5,
+            );
         }
         if let Some(p) = data.p_50 {
-            ctx.stroke(Line::new(Point::new(p*width, 0.0), Point::new(p*width, height)), &LIGHT_GREY, 0.5);
+            ctx.stroke(
+                Line::new(Point::new(p * width, 0.0), Point::new(p * width, height)),
+                &LIGHT_GREY,
+                0.5,
+            );
         }
         if let Some(p) = data.p_75 {
-            ctx.stroke(Line::new(Point::new(p*width, 0.0), Point::new(p*width, height)), &LIGHT_GREY, 0.5);
+            ctx.stroke(
+                Line::new(Point::new(p * width, 0.0), Point::new(p * width, height)),
+                &LIGHT_GREY,
+                0.5,
+            );
         }
 
-        let font = ctx
-            .text()
-            .new_font_by_name("Menlo", 18.0)
-            .build()
-            .unwrap();
+        let font = ctx.text().new_font_by_name("Menlo", 18.0).build().unwrap();
 
-        data.labels_and_counts.iter().enumerate().for_each(|(i, (_, c))| {
-            let r = Rect::from_origin_size(
-                Point::new((i as f64) * bar_width, height - (*c as f64) * height_per_count),
-                Size::new(bar_width, (*c as f64) * height_per_count));
-            if data.highlight == Some(i) {
-                let count = ctx.text().new_text_layout(&font, &format!("{:.2}", data.labels_and_counts[i].1)[..], std::f64::INFINITY).build().unwrap();
-                let pct = ctx.text().new_text_layout(&font, &format!("{:.2}%", 100.0*(data.labels_and_counts[i].1 as f64)/data.total)[..], std::f64::INFINITY).build().unwrap();
-                let val = ctx.text().new_text_layout(&font, &data.labels_and_counts[i].0[..], std::f64::INFINITY).build().unwrap();
-                ctx.draw_text(&count, (0.0, 18.0), &BAR_COLOR);
-                ctx.draw_text(&pct, (0.0, 36.0), &BAR_COLOR);
-                ctx.draw_text(&val, (0.0, 54.0), &BAR_COLOR);
+        data.labels_and_counts
+            .iter()
+            .enumerate()
+            .for_each(|(i, (_, c))| {
+                let r = Rect::from_origin_size(
+                    Point::new(
+                        (i as f64) * bar_width,
+                        height - (*c as f64) * height_per_count,
+                    ),
+                    Size::new(bar_width, (*c as f64) * height_per_count),
+                );
+                if data.highlight == Some(i) {
+                    let count = ctx
+                        .text()
+                        .new_text_layout(
+                            &font,
+                            &format!("{:.2}", data.labels_and_counts[i].1)[..],
+                            std::f64::INFINITY,
+                        )
+                        .build()
+                        .unwrap();
+                    let pct = ctx
+                        .text()
+                        .new_text_layout(
+                            &font,
+                            &format!(
+                                "{:.2}%",
+                                100.0 * (data.labels_and_counts[i].1 as f64) / data.total
+                            )[..],
+                            std::f64::INFINITY,
+                        )
+                        .build()
+                        .unwrap();
+                    let val = ctx
+                        .text()
+                        .new_text_layout(
+                            &font,
+                            &data.labels_and_counts[i].0[..],
+                            std::f64::INFINITY,
+                        )
+                        .build()
+                        .unwrap();
+                    ctx.draw_text(&count, (0.0, 18.0), &BAR_COLOR);
+                    ctx.draw_text(&pct, (0.0, 36.0), &BAR_COLOR);
+                    ctx.draw_text(&val, (0.0, 54.0), &BAR_COLOR);
 
-                ctx.fill(r, &HIGHLIGHT_BAR_COLOR);
-            } else {
-                ctx.fill(r, &BAR_COLOR);
-            }
-            ctx.stroke(r, &DARK_GREY, 0.25);
-        });
+                    ctx.fill(r, &HIGHLIGHT_BAR_COLOR);
+                } else {
+                    ctx.fill(r, &BAR_COLOR);
+                }
+                ctx.stroke(r, &DARK_GREY, 0.25);
+            });
     }
 }
