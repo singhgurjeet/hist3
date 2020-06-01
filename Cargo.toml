@@ -1,0 +1,13 @@
+[package]
+name = "hist3"
+version = "0.1.0"
+authors = ["sunny <gurjeet@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+druid = {git="https://github.com/xi-editor/druid"}
+atty = "0.2"
+itertools = "0.9.0"
+clap = "2.33.1"
