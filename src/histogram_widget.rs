@@ -1,9 +1,8 @@
 use crate::AppState;
 use crate::styles::*;
 
-use druid::piet::{FontBuilder, ImageFormat, InterpolationMode, Text, TextLayoutBuilder};
 use druid::widget::prelude::*;
-use druid::{Affine, AppLauncher, Color, LocalizedString, Point, Rect, WindowDesc};
+use druid::{Point, Rect};
 
 pub struct Histogram {}
 

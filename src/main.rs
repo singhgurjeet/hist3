@@ -6,8 +6,8 @@ mod styles;
 mod histogram_widget;
 
 use druid::widget::prelude::*;
-use druid::{AppLauncher, LocalizedString, WindowDesc, Data, Command, Lens, ExtEventSink, Selector, AppDelegate, DelegateCtx, Target};
-use druid::widget::{Label, Either, Flex, Align};
+use druid::{AppLauncher, LocalizedString, WindowDesc, Data, Command, ExtEventSink, Selector, AppDelegate, DelegateCtx, Target};
+use druid::widget::{Label, Either, Align};
 use atty::Stream;
 use std::thread;
 
