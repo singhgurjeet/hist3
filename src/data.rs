@@ -66,7 +66,7 @@ fn histogram_from_numbers(vals: &Vec<String>, num_bars: &usize) -> (Vec<(String,
     let total = existing_counts.iter().fold(0.0, |t, (_s, x)| t + *x as f64);
     (
         (0..*num_bars).map(|i| (i as usize, existing_counts.get(&(i as usize)).unwrap_or(&(0 as usize))))
-            .map(|(i, val)| (format!("{}", min + (i as f64) * delta + 0.5 as f64), *val))
+            .map(|(i, val)| (format!("{:.2}", min + (i as f64) * delta + 0.5 as f64), *val))
             .collect::<Vec<(String, usize)>>(),
         Some((sorted_nums[len_25] - min)/ range),
         Some((sorted_nums[len_25 * 2] - min)/ range),

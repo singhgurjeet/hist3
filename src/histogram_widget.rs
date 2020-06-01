@@ -4,6 +4,7 @@ use crate::styles::*;
 use druid::widget::prelude::*;
 use druid::{Point, Rect};
 use druid::kurbo::Line;
+use druid::piet::{FontBuilder, Text, TextLayoutBuilder};
 
 pub struct Histogram {}
 
@@ -63,11 +64,24 @@ impl Widget<AppState> for Histogram {
             ctx.stroke(Line::new(Point::new(p*width, 0.0), Point::new(p*width, height)), &LIGHT_GREY, 0.5);
         }
 
+        let font = ctx
+            .text()
+            .new_font_by_name("Menlo", 18.0)
+            .build()
+            .unwrap();
+
         data.labels_and_counts.iter().enumerate().for_each(|(i, (_, c))| {
             let r = Rect::from_origin_size(
                 Point::new((i as f64) * bar_width, height - (*c as f64) * height_per_count),
                 Size::new(bar_width, (*c as f64) * height_per_count));
             if data.highlight == Some(i) {
+                let count = ctx.text().new_text_layout(&font, &format!("{:.2}", data.labels_and_counts[i].1)[..], std::f64::INFINITY).build().unwrap();
+                let pct = ctx.text().new_text_layout(&font, &format!("{:.2}%", 100.0*(data.labels_and_counts[i].1 as f64)/data.total)[..], std::f64::INFINITY).build().unwrap();
+                let val = ctx.text().new_text_layout(&font, &data.labels_and_counts[i].0[..], std::f64::INFINITY).build().unwrap();
+                ctx.draw_text(&count, (0.0, 18.0), &BAR_COLOR);
+                ctx.draw_text(&pct, (0.0, 36.0), &BAR_COLOR);
+                ctx.draw_text(&val, (0.0, 54.0), &BAR_COLOR);
+
                 ctx.fill(r, &HIGHLIGHT_BAR_COLOR);
             } else {
                 ctx.fill(r, &BAR_COLOR);

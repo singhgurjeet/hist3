@@ -4,7 +4,7 @@ pub static DARK_GREY: Color = Color::rgb8(32, 32, 32);
 pub static LIGHT_GREY: Color = Color::rgb8(128, 128, 128);
 pub static BAR_COLOR: Color = Color::rgb8(96, 96, 96);
 pub static HIGHLIGHT_BAR_COLOR: Color = Color::rgb8(200, 200, 200);
-// pub static LABEL_COLOR: Color = Color {r:1.0, g:1.0, b:1.0, a:1.0};
+pub static LABEL_COLOR: Color = Color::rgb8(255, 255, 255);
 //
 // pub static PERCENTILE_STROKE: Stroke = Stroke {
 //     width: 0.5,
