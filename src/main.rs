@@ -142,7 +142,7 @@ pub fn main() {
         .unwrap();
 
     let main_window = WindowDesc::new(build_main_window)
-        .title(LocalizedString::new("Blocking functions"))
+        .title(LocalizedString::new("Histogram"))
         .window_size(Size {
             width: 800.0,
             height: 600.0,
