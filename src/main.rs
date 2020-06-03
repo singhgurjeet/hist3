@@ -13,6 +13,7 @@ use druid::{
     Target, WindowDesc,
 };
 use std::thread;
+use std::path::Path;
 
 const LOAD_DATA: Selector<(InputSource, usize)> = Selector::new("load_data");
 const LOADED: Selector<AppState> = Selector::new("loaded_data");
@@ -133,7 +134,11 @@ pub fn main() {
     let input = if !atty::is(Stream::Stdin) {
         InputSource::Stdin
     } else {
-        InputSource::FileName(matches.value_of("INPUT").expect("No input").to_owned())
+        let file_name = matches.value_of("INPUT").expect("No input").to_owned();
+        if !Path::new(&file_name).exists() {
+            panic!("File does not exist");
+        }
+        InputSource::FileName(file_name)
     };
     let num_bins = matches
         .value_of("BINS")
