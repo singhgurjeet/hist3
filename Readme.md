@@ -10,4 +10,4 @@ all the cities in the world:
 $ curl -LO https://burntsushi.net/stuff/worldcitiespop.csv
 $ cat worldcitiespop.csv | cut -f6 -d, | hist3
 ```
-![Demo](https://gfycat.com/fatherlyjauntyairedaleterrier)
+![Demo](https://gfycat.com/enchanteduntimelyamericansaddlebred)
