@@ -6,6 +6,9 @@ use druid::piet::{FontBuilder, Text, TextLayoutBuilder};
 use druid::widget::prelude::*;
 use druid::{Point, Rect};
 
+//TODO: Add a vertical line with the current value of the x axis as the pointer moves (white on black)
+//TODO: Add a command line option to disable the legend
+
 pub struct Histogram {}
 
 impl Widget<AppState> for Histogram {
