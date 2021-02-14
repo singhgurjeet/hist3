@@ -1,8 +1,13 @@
-use crate::InputSource;
 use itertools::Itertools;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, BufRead};
+
+#[derive(Clone)]
+pub enum InputSource {
+    FileName(String),
+    Stdin,
+}
 
 fn compare_f64(x: &f64, y: &f64) -> std::cmp::Ordering {
     x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal)

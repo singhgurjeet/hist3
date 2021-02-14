@@ -1,13 +1,39 @@
 use crate::styles::*;
-use crate::AppState;
 
 use druid::kurbo::Line;
 use druid::piet::{FontBuilder, Text, TextLayoutBuilder};
 use druid::widget::prelude::*;
-use druid::{Point, Rect};
+use druid::{Point, Rect, Data};
 
 //TODO: Add a vertical line with the current value of the x axis as the pointer moves (white on black)
 //TODO: Add a command line option to disable the legend
+
+#[derive(Clone, Default, Debug)]
+pub struct AppState {
+    pub loaded: bool,
+    pub labels_and_counts: Vec<(String, usize)>,
+    pub p_25: Option<f64>,
+    pub p_50: Option<f64>,
+    pub p_75: Option<f64>,
+    pub total: f64,
+    pub highlight: Option<usize>,
+}
+
+impl Data for AppState {
+    fn same(&self, other: &Self) -> bool {
+        self.loaded.eq(&other.loaded)
+            && self.p_25.eq(&other.p_25)
+            && self.p_50.eq(&other.p_50)
+            && self.p_75.eq(&other.p_75)
+            && self.total.eq(&other.total)
+            && self.highlight.eq(&other.highlight)
+            && self
+                .labels_and_counts
+                .iter()
+                .zip(other.labels_and_counts.iter())
+                .all(|((s, i), (os, oi))| s.eq(os) && i.eq(oi))
+    }
+}
 
 pub struct Histogram {}
 

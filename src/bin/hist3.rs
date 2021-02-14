@@ -1,28 +1,22 @@
 #[macro_use]
 extern crate clap;
 
-mod data;
-mod histogram_widget;
-mod styles;
-
 use atty::Stream;
 use druid::widget::prelude::*;
 use druid::widget::{Align, Either, Label};
 use druid::{
-    AppDelegate, AppLauncher, Command, Data, DelegateCtx, ExtEventSink, LocalizedString, Selector,
+    AppDelegate, AppLauncher, Command, DelegateCtx, ExtEventSink, LocalizedString, Selector,
     Target, WindowDesc,
 };
 use std::thread;
 use std::path::Path;
+use hist3::data;
+use hist3::histogram_widget;
+use hist3::data::InputSource;
+use hist3::histogram_widget::AppState;
 
 const LOAD_DATA: Selector<(InputSource, usize)> = Selector::new("load_data");
 const LOADED: Selector<AppState> = Selector::new("loaded_data");
-
-#[derive(Clone)]
-pub enum InputSource {
-    FileName(String),
-    Stdin,
-}
 
 fn wrapped_load_data(sink: ExtEventSink, input: InputSource, num_bins: usize) {
     thread::spawn(move || {
@@ -43,33 +37,6 @@ fn wrapped_load_data(sink: ExtEventSink, input: InputSource, num_bins: usize) {
         )
         .expect("command failed to submit");
     });
-}
-
-#[derive(Clone, Default, Debug)]
-struct AppState {
-    loaded: bool,
-    labels_and_counts: Vec<(String, usize)>,
-    p_25: Option<f64>,
-    p_50: Option<f64>,
-    p_75: Option<f64>,
-    total: f64,
-    highlight: Option<usize>,
-}
-
-impl Data for AppState {
-    fn same(&self, other: &Self) -> bool {
-        self.loaded.eq(&other.loaded)
-            && self.p_25.eq(&other.p_25)
-            && self.p_50.eq(&other.p_50)
-            && self.p_75.eq(&other.p_75)
-            && self.total.eq(&other.total)
-            && self.highlight.eq(&other.highlight)
-            && self
-                .labels_and_counts
-                .iter()
-                .zip(other.labels_and_counts.iter())
-                .all(|((s, i), (os, oi))| s.eq(os) && i.eq(oi))
-    }
 }
 
 struct Delegate {
