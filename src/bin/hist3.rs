@@ -4,10 +4,7 @@ extern crate clap;
 use atty::Stream;
 use druid::widget::prelude::*;
 use druid::widget::{Align, Either, Label};
-use druid::{
-    AppDelegate, AppLauncher, Command, DelegateCtx, ExtEventSink, LocalizedString, Selector,
-    Target, WindowDesc,
-};
+use druid::{AppDelegate, AppLauncher, Command, DelegateCtx, ExtEventSink, LocalizedString, Selector, Target, WindowDesc, Handled};
 use std::thread;
 use std::path::Path;
 use hist3::data;
@@ -33,7 +30,7 @@ fn wrapped_load_data(sink: ExtEventSink, input: InputSource, num_bins: usize) {
                 total,
                 highlight: None,
             },
-            None,
+            Target::Auto,
         )
         .expect("command failed to submit");
     });
@@ -46,7 +43,7 @@ struct Delegate {
 impl Delegate {
     fn new(eventsink: ExtEventSink, input: InputSource, num_bins: usize) -> Self {
         eventsink
-            .submit_command(LOAD_DATA, (input, num_bins), None)
+            .submit_command(LOAD_DATA, (input, num_bins), Target::Auto)
             .expect("Could not load data");
         Delegate { eventsink }
     }
@@ -60,7 +57,7 @@ impl AppDelegate<AppState> for Delegate {
         cmd: &Command,
         data: &mut AppState,
         _env: &Env,
-    ) -> bool {
+    ) -> Handled {
         if let Some((input, num_bins)) = cmd.get(LOAD_DATA) {
             wrapped_load_data(self.eventsink.clone(), (*input).clone(), *num_bins);
         }
@@ -73,7 +70,7 @@ impl AppDelegate<AppState> for Delegate {
             data.total = histogram_data.total;
             data.highlight = None;
         }
-        true
+        Handled::Yes
     }
 }
 

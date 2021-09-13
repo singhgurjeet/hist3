@@ -1,9 +1,9 @@
 use crate::styles::*;
 
 use druid::kurbo::Line;
-use druid::piet::{FontBuilder, Text, TextLayoutBuilder};
+use druid::piet::{Text, TextLayoutBuilder};
 use druid::widget::prelude::*;
-use druid::{Point, Rect, Data};
+use druid::{Point, Rect, Data, FontFamily};
 
 //TODO: Add a vertical line with the current value of the x axis as the pointer moves (white on black)
 //TODO: Add a command line option to disable the legend
@@ -122,8 +122,6 @@ impl Widget<AppState> for Histogram {
             );
         }
 
-        let font = ctx.text().new_font_by_name("Menlo", 18.0).build().unwrap();
-
         data.labels_and_counts
             .iter()
             .enumerate()
@@ -138,37 +136,31 @@ impl Widget<AppState> for Histogram {
                 if data.highlight == Some(i) {
                     let count = ctx
                         .text()
-                        .new_text_layout(
-                            &font,
-                            &format!("{:.2}", data.labels_and_counts[i].1)[..],
-                            std::f64::INFINITY,
-                        )
+                        .new_text_layout(format!("{:.2}", data.labels_and_counts[i].1.clone()))
+                        .font(FontFamily::MONOSPACE, 18.0)
+                        .text_color(BAR_COLOR.clone())
                         .build()
                         .unwrap();
                     let pct = ctx
                         .text()
-                        .new_text_layout(
-                            &font,
-                            &format!(
-                                "{:.2}%",
-                                100.0 * (data.labels_and_counts[i].1 as f64) / data.total
-                            )[..],
-                            std::f64::INFINITY,
-                        )
+                        .new_text_layout(format!(
+                            "{:.2}%",
+                            100.0 * (data.labels_and_counts[i].1.clone() as f64) / data.total
+                        ))
+                        .font(FontFamily::MONOSPACE, 18.0)
+                        .text_color(BAR_COLOR.clone())
                         .build()
                         .unwrap();
                     let val = ctx
                         .text()
-                        .new_text_layout(
-                            &font,
-                            &data.labels_and_counts[i].0[..],
-                            std::f64::INFINITY,
-                        )
+                        .new_text_layout(data.labels_and_counts[i].0.clone())
+                        .font(FontFamily::MONOSPACE, 18.0)
+                        .text_color(BAR_COLOR.clone())
                         .build()
                         .unwrap();
-                    ctx.draw_text(&count, (0.0, 18.0), &BAR_COLOR);
-                    ctx.draw_text(&pct, (0.0, 36.0), &BAR_COLOR);
-                    ctx.draw_text(&val, (0.0, 54.0), &BAR_COLOR);
+                    ctx.draw_text(&count, (0.0, 18.0));
+                    ctx.draw_text(&pct, (0.0, 36.0));
+                    ctx.draw_text(&val, (0.0, 54.0));
 
                     ctx.fill(r, &HIGHLIGHT_BAR_COLOR);
                 } else {
