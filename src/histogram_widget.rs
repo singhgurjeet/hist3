@@ -3,7 +3,7 @@ use crate::styles::*;
 use druid::kurbo::Line;
 use druid::piet::{Text, TextLayoutBuilder};
 use druid::widget::prelude::*;
-use druid::{Point, Rect, Data, FontFamily};
+use druid::{Data, FontFamily, Point, Rect};
 
 //TODO: Add a vertical line with the current value of the x axis as the pointer moves (white on black)
 //TODO: Add a command line option to disable the legend

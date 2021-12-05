@@ -4,13 +4,16 @@ extern crate clap;
 use atty::Stream;
 use druid::widget::prelude::*;
 use druid::widget::{Align, Either, Label};
-use druid::{AppDelegate, AppLauncher, Command, DelegateCtx, ExtEventSink, LocalizedString, Selector, Target, WindowDesc, Handled};
-use std::thread;
-use std::path::Path;
+use druid::{
+    AppDelegate, AppLauncher, Command, DelegateCtx, ExtEventSink, Handled, LocalizedString,
+    Selector, Target, WindowDesc,
+};
 use hist3::data;
-use hist3::histogram_widget;
 use hist3::data::InputSource;
+use hist3::histogram_widget;
 use hist3::histogram_widget::AppState;
+use std::path::Path;
+use std::thread;
 
 const LOAD_DATA: Selector<(InputSource, usize)> = Selector::new("load_data");
 const LOADED: Selector<AppState> = Selector::new("loaded_data");
