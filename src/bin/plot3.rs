@@ -1,15 +1,19 @@
 #[macro_use]
 extern crate clap;
 
-use std::fs::File;
-use std::{io, thread};
-use std::io::BufRead;
 use atty::Stream;
 use druid::widget::{Align, Label};
-use druid::{AppLauncher, Command, DelegateCtx, Env, ExtEventSink, Handled, LocalizedString, Selector, Size, Target, Widget, WindowDesc};
+use druid::{
+    AppLauncher, Command, DelegateCtx, Env, ExtEventSink, Handled, LocalizedString, Selector, Size,
+    Target, Widget, WindowDesc,
+};
 use hist3::data::InputSource;
+use hist3::plot_widget;
 use hist3::plot_widget::AppState;
+use std::fs::File;
+use std::io::BufRead;
 use std::path::Path;
+use std::{io, thread};
 
 const LOAD_DATA: Selector<f64> = Selector::new("new_data");
 
@@ -29,11 +33,20 @@ impl druid::AppDelegate<AppState> for Delegate {
         _ctx: &mut DelegateCtx,
         _target: Target,
         cmd: &Command,
-        _data: &mut AppState,
+        data: &mut AppState,
         _env: &Env,
     ) -> Handled {
         if let Some(val) = cmd.get(LOAD_DATA) {
-            println!("Received : {:?}", val);
+            if data.vals.len() == 0 {
+                data.min = *val;
+                data.max = *val;
+            }
+            data.vals.push(*val);
+            if *val < data.min {
+                data.min = *val;
+            } else if *val > data.max {
+                data.max = *val;
+            }
         }
 
         Handled::Yes
@@ -41,10 +54,7 @@ impl druid::AppDelegate<AppState> for Delegate {
 }
 
 fn build_main_window() -> impl Widget<AppState> {
-    let text = LocalizedString::new("Loading...");
-    let loading_text = Label::new(text);
-
-    Align::centered(loading_text)
+    Align::centered(plot_widget::Plot {})
 }
 
 pub fn main() {
@@ -71,7 +81,8 @@ pub fn main() {
         });
     let app = AppLauncher::with_window(main_window);
     let delegate = Delegate::new(app.get_external_handle());
-    let sink = delegate.eventsink.clone();
+    let sink = app.get_external_handle();
+    // let sink = delegate.eventsink.clone();
     thread::spawn(move || {
         stream_numbers(input, sink);
     });
@@ -87,19 +98,19 @@ pub fn stream_numbers(input: InputSource, sink: ExtEventSink) {
 
     match input {
         InputSource::Stdin => {
-            let mut reader = std::io::stdin();
+            let reader = std::io::stdin();
             loop {
                 match reader.read_line(&mut line) {
                     Ok(bytes_read) => {
                         if bytes_read == 0 {
                             break;
                         }
-                        process_line(&sink, &mut line, bytes_read);
+                        process_line(&sink, &mut line);
                     }
                     Err(_) => {}
                 }
             }
-        },
+        }
         InputSource::FileName(file_name) => {
             let file = File::open(file_name).unwrap();
             let mut reader = io::BufReader::new(file);
@@ -109,22 +120,19 @@ pub fn stream_numbers(input: InputSource, sink: ExtEventSink) {
                         if bytes_read == 0 {
                             break;
                         }
-                        process_line(&sink, &mut line, bytes_read);
+                        process_line(&sink, &mut line);
                     }
                     Err(_) => {}
                 }
             }
-        },
+        }
     };
 }
 
-fn process_line(sink: &ExtEventSink, line: &mut String, bytes_read: usize) {
+fn process_line(sink: &ExtEventSink, line: &mut String) {
     if let Ok(val) = line.trim().parse::<f64>() {
-        sink.submit_command(
-            LOAD_DATA,
-            val,
-            Target::Auto,
-        ).expect("command failed to submit");
+        sink.submit_command(LOAD_DATA, val, Target::Auto)
+            .expect("command failed to submit");
     }
     line.clear();
 }
