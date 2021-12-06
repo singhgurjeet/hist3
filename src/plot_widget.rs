@@ -68,8 +68,8 @@ impl Widget<AppState> for Plot {
             return;
         }
         let size = ctx.size();
-        let width = size.width;
-        let height = size.height;
+        let width = size.width - 10.0;
+        let height = size.height - 10.0;
         let x_delta = width / (data.vals.len() as f64 - 1.0);
         let data_range = height / (data.max - data.min);
 
@@ -78,14 +78,14 @@ impl Widget<AppState> for Plot {
 
         for i in 0..data.vals.len() {
             let p1 = Point::new(
-                x_delta * (i as f64),
-                height - (data.vals[i] - data.min) * data_range,
+                5.0 + x_delta * (i as f64),
+                5.0 + height - (data.vals[i] - data.min) * data_range,
             );
             ctx.fill(Circle::new(p1, 3.0), &BAR_COLOR);
             if i < data.vals.len() - 1 {
                 let p2 = Point::new(
-                    x_delta * ((i + 1) as f64),
-                    height - (data.vals[i + 1] - data.min) * data_range,
+                    5.0 + x_delta * ((i + 1) as f64),
+                    5.0 + height - (data.vals[i + 1] - data.min) * data_range,
                 );
                 ctx.stroke(Line::new(p1, p2), &BAR_COLOR, 0.5);
             }

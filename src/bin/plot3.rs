@@ -54,7 +54,7 @@ impl druid::AppDelegate<AppState> for Delegate {
 }
 
 fn build_main_window() -> impl Widget<AppState> {
-    Align::centered(plot_widget::Plot {})
+    Align::centered(plot_widget::Plot{})
 }
 
 pub fn main() {
