@@ -15,7 +15,7 @@ use std::path::Path;
 use std::{io, thread};
 use druid::widget::Align;
 
-const LOAD_DATA: Selector<f64> = Selector::new("new_data");
+const NEW_DATA: Selector<f64> = Selector::new("new_data");
 
 struct Delegate {
     // eventsink: ExtEventSink,
@@ -36,7 +36,7 @@ impl druid::AppDelegate<AppState> for Delegate {
         data: &mut AppState,
         _env: &Env,
     ) -> Handled {
-        if let Some(val) = cmd.get(LOAD_DATA) {
+        if let Some(val) = cmd.get(NEW_DATA) {
             if data.vals.len() == 0 {
                 data.min = *val;
                 data.max = *val;
@@ -131,7 +131,7 @@ pub fn stream_numbers(input: InputSource, sink: ExtEventSink) {
 
 fn process_line(sink: &ExtEventSink, line: &mut String) {
     if let Ok(val) = line.trim().parse::<f64>() {
-        sink.submit_command(LOAD_DATA, val, Target::Auto)
+        sink.submit_command(NEW_DATA, val, Target::Auto)
             .expect("command failed to submit");
     }
     line.clear();
