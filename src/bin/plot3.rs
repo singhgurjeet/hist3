@@ -2,7 +2,6 @@
 extern crate clap;
 
 use atty::Stream;
-use druid::widget::{Align, Label};
 use druid::{
     AppLauncher, Command, DelegateCtx, Env, ExtEventSink, Handled, LocalizedString, Selector, Size,
     Target, Widget, WindowDesc,
@@ -14,16 +13,17 @@ use std::fs::File;
 use std::io::BufRead;
 use std::path::Path;
 use std::{io, thread};
+use druid::widget::Align;
 
 const LOAD_DATA: Selector<f64> = Selector::new("new_data");
 
 struct Delegate {
-    eventsink: ExtEventSink,
+    // eventsink: ExtEventSink,
 }
 
 impl Delegate {
-    fn new(eventsink: ExtEventSink) -> Self {
-        Delegate { eventsink }
+    fn new() -> Self {
+        Delegate { }
     }
 }
 
@@ -80,7 +80,7 @@ pub fn main() {
             height: 600.0,
         });
     let app = AppLauncher::with_window(main_window);
-    let delegate = Delegate::new(app.get_external_handle());
+    let delegate = Delegate::new();
     let sink = app.get_external_handle();
     // let sink = delegate.eventsink.clone();
     thread::spawn(move || {

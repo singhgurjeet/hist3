@@ -1,7 +1,6 @@
 use crate::styles::{BAR_COLOR, DARK_GREY};
 use druid::kurbo::Circle;
 use druid::kurbo::Line;
-use druid::platform_menus::mac::file::print;
 use druid::{
     BoxConstraints, Data, Env, Event, EventCtx, LayoutCtx, LifeCycle, LifeCycleCtx, PaintCtx,
     Point, Rect, RenderContext, Size, UpdateCtx, Widget,
@@ -28,7 +27,7 @@ impl Data for AppState {
 pub struct Plot {}
 
 impl Widget<AppState> for Plot {
-    fn event(&mut self, ctx: &mut EventCtx, event: &Event, data: &mut AppState, _env: &Env) {}
+    fn event(&mut self, _ctx: &mut EventCtx, _event: &Event, _data: &mut AppState, _env: &Env) {}
 
     fn lifecycle(
         &mut self,
