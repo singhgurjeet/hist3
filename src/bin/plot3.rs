@@ -41,7 +41,7 @@ impl druid::AppDelegate<AppState> for Delegate {
                 data.min = *val;
                 data.max = *val;
             }
-            data.vals.push(*val);
+            data.vals.push_back(*val);
             if *val < data.min {
                 data.min = *val;
             } else if *val > data.max {

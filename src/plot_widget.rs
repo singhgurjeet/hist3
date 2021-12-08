@@ -8,17 +8,14 @@ use druid::{
 
 #[derive(Clone, Default, Debug)]
 pub struct AppState {
-    pub vals: Vec<f64>,
+    pub vals: druid::im::Vector<f64>,
     pub max: f64,
     pub min: f64,
 }
 
 impl Data for AppState {
     fn same(&self, other: &Self) -> bool {
-        self.vals
-            .iter()
-            .zip(other.vals.iter())
-            .all(|(v, ov)| v.eq(ov))
+        self.vals.same(&other.vals)
             && self.max.eq(&other.max)
             && self.min.eq(&other.min)
     }
