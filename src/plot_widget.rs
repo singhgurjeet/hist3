@@ -15,9 +15,7 @@ pub struct AppState {
 
 impl Data for AppState {
     fn same(&self, other: &Self) -> bool {
-        self.vals.same(&other.vals)
-            && self.max.eq(&other.max)
-            && self.min.eq(&other.min)
+        self.vals.same(&other.vals) && self.max.eq(&other.max) && self.min.eq(&other.min)
     }
 }
 

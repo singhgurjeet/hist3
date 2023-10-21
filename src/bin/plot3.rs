@@ -2,6 +2,7 @@
 extern crate clap;
 
 use atty::Stream;
+use druid::widget::Align;
 use druid::{
     AppLauncher, Command, DelegateCtx, Env, ExtEventSink, Handled, LocalizedString, Selector, Size,
     Target, Widget, WindowDesc,
@@ -13,7 +14,6 @@ use std::fs::File;
 use std::io::BufRead;
 use std::path::Path;
 use std::{io, thread};
-use druid::widget::Align;
 
 const NEW_DATA: Selector<f64> = Selector::new("new_data");
 
@@ -23,7 +23,7 @@ struct Delegate {
 
 impl Delegate {
     fn new() -> Self {
-        Delegate { }
+        Delegate {}
     }
 }
 
@@ -54,7 +54,7 @@ impl druid::AppDelegate<AppState> for Delegate {
 }
 
 fn build_main_window() -> impl Widget<AppState> {
-    Align::centered(plot_widget::Plot{})
+    Align::centered(plot_widget::Plot {})
 }
 
 pub fn main() {
