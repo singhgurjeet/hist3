@@ -14,6 +14,7 @@ use std::fs::File;
 use std::io::BufRead;
 use std::path::Path;
 use std::{io, thread};
+use regex::Regex;
 
 const NEW_DATA: Selector<f64> = Selector::new("new_data");
 
@@ -130,9 +131,15 @@ pub fn stream_numbers(input: InputSource, sink: ExtEventSink) {
 }
 
 fn process_line(sink: &ExtEventSink, line: &mut String) {
-    if let Ok(val) = line.trim().parse::<f64>() {
-        sink.submit_command(NEW_DATA, val, Target::Auto)
-            .expect("command failed to submit");
+    let re = Regex::new(r"(-?\d+(\.\d+)?)").unwrap();
+
+    if let Some(caps) = re.captures(line) {
+        let number = &caps[1];
+        if let Ok(val) = number.parse::<f64>() {
+            sink.submit_command(NEW_DATA, val, Target::Auto)
+                .expect("command failed to submit");
+        }
     }
+
     line.clear();
 }
