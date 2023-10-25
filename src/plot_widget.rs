@@ -1,4 +1,4 @@
-use crate::styles::{BAR_COLOR, DARK_GREY};
+use crate::styles::{BAR_COLOR, DARK_GREY, LIGHT_GREY, LINE_COLOR};
 use druid::kurbo::Circle;
 use druid::kurbo::Line;
 use druid::{
@@ -71,18 +71,27 @@ impl Widget<AppState> for Plot {
         let rect = Rect::from_origin_size(Point::ORIGIN, size);
         ctx.fill(rect, &DARK_GREY);
 
+        if (data.min*data.max).signum() == -1.0 {
+            let yy = height +  data.min * data_range;
+            ctx.stroke(
+                Line::new(Point::new(0.0, yy), Point::new(width+10.0, yy)),
+                &LIGHT_GREY,
+                1.0,
+            );
+        }
+
         for i in 0..data.vals.len() {
             let p1 = Point::new(
                 5.0 + x_delta * (i as f64),
                 5.0 + height - (data.vals[i] - data.min) * data_range,
             );
-            ctx.fill(Circle::new(p1, 3.0), &BAR_COLOR);
+            ctx.fill(Circle::new(p1, 2.0), &LINE_COLOR);
             if i < data.vals.len() - 1 {
                 let p2 = Point::new(
                     5.0 + x_delta * ((i + 1) as f64),
                     5.0 + height - (data.vals[i + 1] - data.min) * data_range,
                 );
-                ctx.stroke(Line::new(p1, p2), &BAR_COLOR, 0.5);
+                ctx.stroke(Line::new(p1, p2), &LINE_COLOR, 2.0);
             }
         }
     }
