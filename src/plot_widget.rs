@@ -1,10 +1,8 @@
 use crate::styles::{BAR_COLOR, DARK_GREY, LIGHT_GREY, LINE_COLOR};
 use druid::kurbo::Circle;
 use druid::kurbo::Line;
-use druid::{
-    BoxConstraints, Data, Env, Event, EventCtx, LayoutCtx, LifeCycle, LifeCycleCtx, PaintCtx,
-    Point, Rect, RenderContext, Size, UpdateCtx, Widget,
-};
+use druid::{BoxConstraints, Data, Env, Event, EventCtx, FontFamily, LayoutCtx, LifeCycle, LifeCycleCtx, PaintCtx, Point, Rect, RenderContext, Size, UpdateCtx, Widget};
+use druid::piet::{Text, TextLayoutBuilder};
 
 #[derive(Clone, Default, Debug)]
 pub struct AppState {
@@ -79,6 +77,26 @@ impl Widget<AppState> for Plot {
                 1.0,
             );
         }
+
+        let data_max = ctx
+            .text()
+            .new_text_layout(format!("{:.2}", data.max))
+            .font(FontFamily::MONOSPACE, 18.0)
+            .text_color(BAR_COLOR.clone())
+            .build()
+            .unwrap();
+
+        ctx.draw_text(&data_max, (width - 40.0, 5.0));
+
+        let data_min = ctx
+            .text()
+            .new_text_layout(format!("{:.2}", data.min))
+            .font(FontFamily::MONOSPACE, 18.0)
+            .text_color(BAR_COLOR.clone())
+            .build()
+            .unwrap();
+
+        ctx.draw_text(&data_min, (width - 40.0, height - 15.0));
 
         for i in 0..data.vals.len() {
             let p1 = Point::new(
