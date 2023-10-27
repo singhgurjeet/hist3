@@ -64,50 +64,41 @@ impl Widget<AppState> for Plot {
         let width = size.width - 10.0;
         let height = size.height - 10.0;
         let x_delta = width / (data.vals.len() as f64 - 1.0);
-        let data_range = height / (data.max - data.min);
+        let data_range = data.max - data.min;
+        let height_by_data_range = height / data_range;
+        let num_ticks = 10;
 
         let rect = Rect::from_origin_size(Point::ORIGIN, size);
         ctx.fill(rect, &DARK_GREY);
 
-        if (data.min*data.max).signum() == -1.0 {
-            let yy = height +  data.min * data_range;
+        for i in 0..=num_ticks {
+            let yy = 5.0 + (i as f64)*(height - 20.0)/(num_ticks as f64);
+            let txt = ctx
+                .text()
+                .new_text_layout(format!("{:.2}", data.max - (i as f64)*data_range/(num_ticks as f64)))
+                .font(FontFamily::MONOSPACE, 18.0)
+                .text_color(BAR_COLOR.clone())
+                .build()
+                .unwrap();
+
+            ctx.draw_text(&txt, (width - 50.0, yy));
             ctx.stroke(
                 Line::new(Point::new(0.0, yy), Point::new(width+10.0, yy)),
                 &LIGHT_GREY,
-                1.0,
+                0.25,
             );
         }
-
-        let data_max = ctx
-            .text()
-            .new_text_layout(format!("{:.2}", data.max))
-            .font(FontFamily::MONOSPACE, 18.0)
-            .text_color(BAR_COLOR.clone())
-            .build()
-            .unwrap();
-
-        ctx.draw_text(&data_max, (width - 40.0, 5.0));
-
-        let data_min = ctx
-            .text()
-            .new_text_layout(format!("{:.2}", data.min))
-            .font(FontFamily::MONOSPACE, 18.0)
-            .text_color(BAR_COLOR.clone())
-            .build()
-            .unwrap();
-
-        ctx.draw_text(&data_min, (width - 40.0, height - 15.0));
 
         for i in 0..data.vals.len() {
             let p1 = Point::new(
                 5.0 + x_delta * (i as f64),
-                5.0 + height - (data.vals[i] - data.min) * data_range,
+                5.0 + height - (data.vals[i] - data.min) * height_by_data_range,
             );
             ctx.fill(Circle::new(p1, 2.0), &LINE_COLOR);
             if i < data.vals.len() - 1 {
                 let p2 = Point::new(
                     5.0 + x_delta * ((i + 1) as f64),
-                    5.0 + height - (data.vals[i + 1] - data.min) * data_range,
+                    5.0 + height - (data.vals[i + 1] - data.min) * height_by_data_range,
                 );
                 ctx.stroke(Line::new(p1, p2), &LINE_COLOR, 2.0);
             }
