@@ -1,8 +1,11 @@
 use crate::styles::{BAR_COLOR, DARK_GREY, LIGHT_GREY, LINE_COLOR};
 use druid::kurbo::Circle;
 use druid::kurbo::Line;
-use druid::{BoxConstraints, Data, Env, Event, EventCtx, FontFamily, LayoutCtx, LifeCycle, LifeCycleCtx, PaintCtx, Point, Rect, RenderContext, Size, UpdateCtx, Widget};
 use druid::piet::{Text, TextLayoutBuilder};
+use druid::{
+    BoxConstraints, Data, Env, Event, EventCtx, FontFamily, LayoutCtx, LifeCycle, LifeCycleCtx,
+    PaintCtx, Point, Rect, RenderContext, Size, UpdateCtx, Widget,
+};
 
 #[derive(Clone, Default, Debug)]
 pub struct AppState {
@@ -72,10 +75,13 @@ impl Widget<AppState> for Plot {
         ctx.fill(rect, &DARK_GREY);
 
         for i in 0..=num_ticks {
-            let yy = 5.0 + (i as f64)*(height - 20.0)/(num_ticks as f64);
+            let yy = 5.0 + (i as f64) * (height - 20.0) / (num_ticks as f64);
             let txt = ctx
                 .text()
-                .new_text_layout(format!("{:.2}", data.max - (i as f64)*data_range/(num_ticks as f64)))
+                .new_text_layout(format!(
+                    "{:.2}",
+                    data.max - (i as f64) * data_range / (num_ticks as f64)
+                ))
                 .font(FontFamily::MONOSPACE, 18.0)
                 .text_color(BAR_COLOR.clone())
                 .build()
@@ -83,7 +89,7 @@ impl Widget<AppState> for Plot {
 
             ctx.draw_text(&txt, (width - 50.0, yy));
             ctx.stroke(
-                Line::new(Point::new(0.0, yy), Point::new(width+10.0, yy)),
+                Line::new(Point::new(0.0, yy), Point::new(width + 10.0, yy)),
                 &LIGHT_GREY,
                 0.25,
             );

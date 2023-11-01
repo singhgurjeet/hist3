@@ -10,11 +10,11 @@ use druid::{
 use hist3::data::InputSource;
 use hist3::plot_widget;
 use hist3::plot_widget::AppState;
+use regex::Regex;
 use std::fs::File;
 use std::io::BufRead;
 use std::path::Path;
 use std::{io, thread};
-use regex::Regex;
 
 const NEW_DATA: Selector<f64> = Selector::new("new_data");
 

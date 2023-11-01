@@ -101,25 +101,60 @@ impl Widget<AppState> for Histogram {
         ctx.fill(rect, &DARK_GREY);
 
         if let Some(p) = data.p_25 {
+            let xx = p * width;
+
             ctx.stroke(
-                Line::new(Point::new(p * width, 0.0), Point::new(p * width, height)),
+                Line::new(Point::new(xx, 0.0), Point::new(xx, height)),
                 &LIGHT_GREY,
                 0.5,
             );
+
+            let txt = ctx
+                .text()
+                .new_text_layout(format!("{:.2}", p))
+                .font(FontFamily::MONOSPACE, 18.0)
+                .text_color(BAR_COLOR.clone())
+                .build()
+                .unwrap();
+
+            ctx.draw_text(&txt, (xx, 0.0));
         }
         if let Some(p) = data.p_50 {
+            let xx = p * width;
+
             ctx.stroke(
-                Line::new(Point::new(p * width, 0.0), Point::new(p * width, height)),
+                Line::new(Point::new(xx, 0.0), Point::new(xx, height)),
                 &LIGHT_GREY,
                 0.5,
             );
+
+            let txt = ctx
+                .text()
+                .new_text_layout(format!("{:.2}", p))
+                .font(FontFamily::MONOSPACE, 18.0)
+                .text_color(BAR_COLOR.clone())
+                .build()
+                .unwrap();
+
+            ctx.draw_text(&txt, (xx, 20.0));
         }
         if let Some(p) = data.p_75 {
+            let xx = p * width;
             ctx.stroke(
-                Line::new(Point::new(p * width, 0.0), Point::new(p * width, height)),
+                Line::new(Point::new(xx, 0.0), Point::new(xx, height)),
                 &LIGHT_GREY,
                 0.5,
             );
+
+            let txt = ctx
+                .text()
+                .new_text_layout(format!("{:.2}", p))
+                .font(FontFamily::MONOSPACE, 18.0)
+                .text_color(BAR_COLOR.clone())
+                .build()
+                .unwrap();
+
+            ctx.draw_text(&txt, (xx, 40.0));
         }
 
         data.labels_and_counts
