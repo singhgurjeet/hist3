@@ -43,9 +43,9 @@ fn histogram_from_categories(
     vals: &Vec<String>,
 ) -> (
     Vec<(String, usize)>,
-    Option<f64>,
-    Option<f64>,
-    Option<f64>,
+    Option<(f64, f64)>,
+    Option<(f64, f64)>,
+    Option<(f64, f64)>,
     f64,
 ) {
     let ret: Vec<(String, usize)> = vals
@@ -65,9 +65,9 @@ fn histogram_from_numbers(
     num_bars: &usize,
 ) -> (
     Vec<(String, usize)>,
-    Option<f64>,
-    Option<f64>,
-    Option<f64>,
+    Option<(f64, f64)>,
+    Option<(f64, f64)>,
+    Option<(f64, f64)>,
     f64,
 ) {
     let sorted_nums: Vec<f64> = vals
@@ -106,9 +106,9 @@ fn histogram_from_numbers(
                 )
             })
             .collect::<Vec<(String, usize)>>(),
-        Some((sorted_nums[len_25] - min) / range),
-        Some((sorted_nums[len_25 * 2] - min) / range),
-        Some((sorted_nums[len_25 * 3] - min) / range),
+        Some(((sorted_nums[len_25] - min) / range, sorted_nums[len_25])),
+        Some(((sorted_nums[len_25 * 2] - min) / range, sorted_nums[len_25 * 2])),
+        Some(((sorted_nums[len_25 * 3] - min) / range, sorted_nums[len_25 * 3])),
         total,
     )
 }
@@ -118,9 +118,9 @@ pub fn compute_histogram(
     input: InputSource,
 ) -> (
     Vec<(String, usize)>,
-    Option<f64>,
-    Option<f64>,
-    Option<f64>,
+    Option<(f64, f64)>,
+    Option<(f64, f64)>,
+    Option<(f64, f64)>,
     f64,
 ) {
     let max_num_lines = 10_000_000;

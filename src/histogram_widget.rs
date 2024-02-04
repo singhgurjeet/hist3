@@ -12,9 +12,9 @@ use druid::{Data, FontFamily, Point, Rect};
 pub struct AppState {
     pub loaded: bool,
     pub labels_and_counts: Vec<(String, usize)>,
-    pub p_25: Option<f64>,
-    pub p_50: Option<f64>,
-    pub p_75: Option<f64>,
+    pub p_25: Option<(f64, f64)>,
+    pub p_50: Option<(f64, f64)>,
+    pub p_75: Option<(f64, f64)>,
     pub total: f64,
     pub highlight: Option<usize>,
 }
@@ -100,63 +100,6 @@ impl Widget<AppState> for Histogram {
         let rect = Rect::from_origin_size(Point::ORIGIN, size);
         ctx.fill(rect, &DARK_GREY);
 
-        if let Some(p) = data.p_25 {
-            let xx = p * width;
-
-            ctx.stroke(
-                Line::new(Point::new(xx, 0.0), Point::new(xx, height)),
-                &LIGHT_GREY,
-                0.5,
-            );
-
-            let txt = ctx
-                .text()
-                .new_text_layout(format!("{:.2}", p))
-                .font(FontFamily::MONOSPACE, 18.0)
-                .text_color(BAR_COLOR.clone())
-                .build()
-                .unwrap();
-
-            ctx.draw_text(&txt, (xx, 0.0));
-        }
-        if let Some(p) = data.p_50 {
-            let xx = p * width;
-
-            ctx.stroke(
-                Line::new(Point::new(xx, 0.0), Point::new(xx, height)),
-                &LIGHT_GREY,
-                0.5,
-            );
-
-            let txt = ctx
-                .text()
-                .new_text_layout(format!("{:.2}", p))
-                .font(FontFamily::MONOSPACE, 18.0)
-                .text_color(BAR_COLOR.clone())
-                .build()
-                .unwrap();
-
-            ctx.draw_text(&txt, (xx, 20.0));
-        }
-        if let Some(p) = data.p_75 {
-            let xx = p * width;
-            ctx.stroke(
-                Line::new(Point::new(xx, 0.0), Point::new(xx, height)),
-                &LIGHT_GREY,
-                0.5,
-            );
-
-            let txt = ctx
-                .text()
-                .new_text_layout(format!("{:.2}", p))
-                .font(FontFamily::MONOSPACE, 18.0)
-                .text_color(BAR_COLOR.clone())
-                .build()
-                .unwrap();
-
-            ctx.draw_text(&txt, (xx, 40.0));
-        }
-
         data.labels_and_counts
             .iter()
             .enumerate()
@@ -203,5 +146,62 @@ impl Widget<AppState> for Histogram {
                 }
                 ctx.stroke(r, &DARK_GREY, 0.25);
             });
+
+        if let Some(p) = data.p_25 {
+            let xx = p.0 * width;
+
+            ctx.stroke(
+                Line::new(Point::new(xx, 0.0), Point::new(xx, height)),
+                &LIGHT_GREY,
+                0.5,
+            );
+
+            let txt = ctx
+                .text()
+                .new_text_layout(format!("{:.2}", p.1))
+                .font(FontFamily::MONOSPACE, 18.0)
+                .text_color(TEXT_COLOR.clone())
+                .build()
+                .unwrap();
+
+            ctx.draw_text(&txt, (xx, 0.0));
+        }
+        if let Some(p) = data.p_50 {
+            let xx = p.0 * width;
+
+            ctx.stroke(
+                Line::new(Point::new(xx, 0.0), Point::new(xx, height)),
+                &LIGHT_GREY,
+                0.5,
+            );
+
+            let txt = ctx
+                .text()
+                .new_text_layout(format!("{:.2}", p.1))
+                .font(FontFamily::MONOSPACE, 18.0)
+                .text_color(TEXT_COLOR.clone())
+                .build()
+                .unwrap();
+
+            ctx.draw_text(&txt, (xx, 20.0));
+        }
+        if let Some(p) = data.p_75 {
+            let xx = p.0 * width;
+            ctx.stroke(
+                Line::new(Point::new(xx, 0.0), Point::new(xx, height)),
+                &LIGHT_GREY,
+                0.5,
+            );
+
+            let txt = ctx
+                .text()
+                .new_text_layout(format!("{:.2}", p.1))
+                .font(FontFamily::MONOSPACE, 18.0)
+                .text_color(TEXT_COLOR.clone())
+                .build()
+                .unwrap();
+
+            ctx.draw_text(&txt, (xx, 40.0));
+        }
     }
 }
