@@ -77,26 +77,49 @@ impl Widget<AppState> for Scatter {
         let rect = Rect::from_origin_size(Point::ORIGIN, size);
         ctx.fill(rect, &DARK_GREY);
 
-        // for i in 0..=num_ticks {
-        //     let yy = 5.0 + (i as f64) * (height - 20.0) / (num_ticks as f64);
-        //     let txt = ctx
-        //         .text()
-        //         .new_text_layout(format!(
-        //             "{:.2}",
-        //             data.max - (i as f64) * data_range / (num_ticks as f64)
-        //         ))
-        //         .font(FontFamily::MONOSPACE, 18.0)
-        //         .text_color(BAR_COLOR.clone())
-        //         .build()
-        //         .unwrap();
-        //
-        //     ctx.draw_text(&txt, (width - 50.0, yy));
-        //     ctx.stroke(
-        //         Line::new(Point::new(0.0, yy), Point::new(width + 10.0, yy)),
-        //         &LIGHT_GREY,
-        //         0.25,
-        //     );
-        // }
+        for i in 0..=num_ticks {
+            let yy = 5.0 + (i as f64) * (height - 20.0) / (num_ticks as f64);
+            let txt = ctx
+                .text()
+                .new_text_layout(format!(
+                    "{:.2}",
+                    data.y_max - (i as f64) * y_data_range / (num_ticks as f64)
+                ))
+                .font(FontFamily::MONOSPACE, 18.0)
+                .text_color(BAR_COLOR.clone())
+                .build()
+                .unwrap();
+
+            ctx.draw_text(&txt, (width - 30.0, yy));
+            ctx.stroke(
+                Line::new(Point::new(0.0, yy), Point::new(width + 10.0, yy)),
+                &LIGHT_GREY,
+                0.25,
+            );
+        }
+
+        for i in 0..=num_ticks {
+            let xx = 5.0 + (i as f64) * (width - 20.0) / (num_ticks as f64);
+            let txt = ctx
+                .text()
+                .new_text_layout(format!(
+                    "{:.2}",
+                    data.x_min + (i as f64) * x_data_range / (num_ticks as f64)
+                ))
+                .font(FontFamily::MONOSPACE, 18.0)
+                .text_color(BAR_COLOR.clone())
+                .build()
+                .unwrap();
+
+            if i < num_ticks {
+                ctx.draw_text(&txt, (xx, height - 10.0));
+            }
+            ctx.stroke(
+                Line::new(Point::new(xx, 0.0), Point::new(xx, height)),
+                &LIGHT_GREY,
+                0.25,
+            );
+        }
 
         for (x,y) in &data.vals {
             let p1 = Point::new(
