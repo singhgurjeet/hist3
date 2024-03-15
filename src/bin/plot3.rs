@@ -65,17 +65,17 @@ pub fn main() {
         (@arg INPUT: "Sets the input file to use")
     )
     .get_matches();
-    let input = if !atty::is(Stream::Stdin) {
-        InputSource::Stdin
+    let (input, title) = if !atty::is(Stream::Stdin) {
+        (InputSource::Stdin, "Plot".to_string())
     } else {
         let file_name = matches.value_of("INPUT").expect("No input").to_owned();
         if !Path::new(&file_name).exists() {
             panic!("File does not exist");
         }
-        InputSource::FileName(file_name)
+        (InputSource::FileName(file_name.clone()), file_name)
     };
     let main_window = WindowDesc::new(build_main_window)
-        .title(LocalizedString::new("Plot"))
+        .title(LocalizedString::new("Plot").with_placeholder(title))
         .window_size(Size {
             width: 800.0,
             height: 600.0,
