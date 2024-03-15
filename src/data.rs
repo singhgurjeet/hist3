@@ -107,8 +107,14 @@ fn histogram_from_numbers(
             })
             .collect::<Vec<(String, usize)>>(),
         Some(((sorted_nums[len_25] - min) / range, sorted_nums[len_25])),
-        Some(((sorted_nums[len_25 * 2] - min) / range, sorted_nums[len_25 * 2])),
-        Some(((sorted_nums[len_25 * 3] - min) / range, sorted_nums[len_25 * 3])),
+        Some((
+            (sorted_nums[len_25 * 2] - min) / range,
+            sorted_nums[len_25 * 2],
+        )),
+        Some((
+            (sorted_nums[len_25 * 3] - min) / range,
+            sorted_nums[len_25 * 3],
+        )),
         total,
     )
 }

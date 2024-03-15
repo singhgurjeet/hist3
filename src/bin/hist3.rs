@@ -97,6 +97,7 @@ pub fn main() {
                 (about: "Plot the distribution of input. Data must either be piped in or given as an argument")
                 (@arg BINS: -b --bins +takes_value "The number of bins in the histogram")
                 (@arg INPUT: "Sets the input file to use")
+                (@arg title: --title +takes_value default_value("Plot") "Sets the custom title for the plot window")
             ).get_matches();
     let input = if !atty::is(Stream::Stdin) {
         InputSource::Stdin
@@ -114,7 +115,7 @@ pub fn main() {
         .unwrap();
 
     let main_window = WindowDesc::new(build_main_window)
-        .title(LocalizedString::new("Histogram"))
+        .title(LocalizedString::new("Plot").with_placeholder(matches.value_of("title").unwrap()))
         .window_size(Size {
             width: 800.0,
             height: 600.0,

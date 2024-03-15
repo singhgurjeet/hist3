@@ -63,19 +63,20 @@ pub fn main() {
         (version: "0.1")
         (about: "Simple line plot. Data must either be piped in or given as an argument")
         (@arg INPUT: "Sets the input file to use")
+        (@arg title: --title +takes_value default_value("Plot") "Sets the custom title for the plot window")
     )
     .get_matches();
-    let (input, title) = if !atty::is(Stream::Stdin) {
-        (InputSource::Stdin, "Plot".to_string())
+    let input = if !atty::is(Stream::Stdin) {
+        InputSource::Stdin
     } else {
         let file_name = matches.value_of("INPUT").expect("No input").to_owned();
         if !Path::new(&file_name).exists() {
             panic!("File does not exist");
         }
-        (InputSource::FileName(file_name.clone()), file_name)
+        InputSource::FileName(file_name)
     };
     let main_window = WindowDesc::new(build_main_window)
-        .title(LocalizedString::new("Plot").with_placeholder(title))
+        .title(LocalizedString::new("Plot").with_placeholder(matches.value_of("title").unwrap()))
         .window_size(Size {
             width: 800.0,
             height: 600.0,

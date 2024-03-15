@@ -18,7 +18,11 @@ pub struct AppState {
 
 impl Data for AppState {
     fn same(&self, other: &Self) -> bool {
-        self.vals.same(&other.vals) && self.x_max.eq(&other.x_max) && self.x_min.eq(&other.x_min) && self.y_max.eq(&other.y_max) && self.y_min.eq(&other.y_min)
+        self.vals.same(&other.vals)
+            && self.x_max.eq(&other.x_max)
+            && self.x_min.eq(&other.x_min)
+            && self.y_max.eq(&other.y_max)
+            && self.y_min.eq(&other.y_min)
     }
 }
 
@@ -121,7 +125,7 @@ impl Widget<AppState> for Scatter {
             );
         }
 
-        for (x,y) in &data.vals {
+        for (x, y) in &data.vals {
             let p1 = Point::new(
                 5.0 + (x - data.x_min) * width_by_data_range,
                 5.0 + height - (y - data.y_min) * height_by_data_range,
