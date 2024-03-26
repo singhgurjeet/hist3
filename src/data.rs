@@ -60,6 +60,35 @@ fn histogram_from_categories(
     (ret, None, None, None, total)
 }
 
+/// Generates a histogram from a vector of numerical string values.
+///
+/// This function takes a vector of strings which are expected to be parseable as floating-point
+/// numbers and a reference to the desired number of bars (bins) for the histogram. It returns
+/// a tuple containing the histogram as a vector of tuples where each tuple consists of a string
+/// representation of the bin's midpoint and the count of values in that bin, and three `Option`
+/// tuples representing the 25th, 50th, and 75th percentiles, respectively, if they can be computed.
+/// It also returns the total count of all values as a `f64`.
+///
+/// # Arguments
+///
+/// * `vals` - A reference to a vector of strings to be parsed into floating-point numbers.
+/// * `num_bars` - A reference to the number of bars (bins) the histogram should have.
+///
+/// # Returns
+///
+/// A tuple containing:
+/// - A vector of tuples, where each tuple contains a string representation of the bin's midpoint
+///   and the count of values in that bin.
+/// - An `Option<(f64, f64)>` for the 25th percentile, where the first `f64` is the normalized
+///   position of the percentile, and the second `f64` is the value at the 25th percentile.
+/// - An `Option<(f64, f64)>` for the 50th percentile (median), similar to the 25th percentile.
+/// - An `Option<(f64, f64)>` for the 75th percentile, similar to the 25th percentile.
+/// - The total count of all values as a `f64`.
+///
+/// # Panics
+///
+/// This function panics if the input vector `vals` contains no parseable floating-point numbers
+/// or if the first or last element cannot be parsed into a `f64`.
 fn histogram_from_numbers(
     vals: &Vec<String>,
     num_bars: &usize,
@@ -70,14 +99,12 @@ fn histogram_from_numbers(
     Option<(f64, f64)>,
     f64,
 ) {
-    let sorted_nums: Vec<f64> = vals
+    let sorted_nums = vals
         .iter()
         .filter(|x| x.len() > 0)
-        .map(|x| x.parse::<f64>())
-        .filter(|x| x.is_ok())
-        .map(|x| x.unwrap())
+        .filter_map(|x| x.parse::<f64>().ok())
         .sorted_by(|x, y| compare_f64(x, y))
-        .collect::<Vec<f64>>();
+        .collect::<Vec<_>>();
     let min = *sorted_nums.first().unwrap();
     let max = *sorted_nums.last().unwrap();
     let range = max - min;
@@ -90,19 +117,13 @@ fn histogram_from_numbers(
         .into_iter()
         .map(|(k, group_k)| (k, group_k.count()))
         .collect();
-    let total = existing_counts.iter().fold(0.0, |t, (_s, x)| t + *x as f64);
+    let total = existing_counts.iter().fold(0.0, |t, (_, x)| t + *x as f64);
     (
         (0..*num_bars)
             .map(|i| {
                 (
-                    i as usize,
-                    existing_counts.get(&(i as usize)).unwrap_or(&(0 as usize)),
-                )
-            })
-            .map(|(i, val)| {
-                (
                     format!("{:.2}", min + (i as f64) * delta + 0.5 as f64),
-                    *val,
+                    *existing_counts.get(&(i as usize)).unwrap_or(&(0 as usize))
                 )
             })
             .collect::<Vec<(String, usize)>>(),
