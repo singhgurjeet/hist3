@@ -123,7 +123,7 @@ fn histogram_from_numbers(
             .map(|i| {
                 (
                     format!("{:.2}", min + (i as f64) * delta + 0.5 as f64),
-                    *existing_counts.get(&(i as usize)).unwrap_or(&(0 as usize))
+                    *existing_counts.get(&(i as usize)).unwrap_or(&(0 as usize)),
                 )
             })
             .collect::<Vec<(String, usize)>>(),
