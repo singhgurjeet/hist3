@@ -132,7 +132,7 @@ pub fn stream_numbers(input: InputSource, sink: ExtEventSink) {
 }
 
 fn process_line(sink: &ExtEventSink, line: &mut String) {
-    let re = Regex::new(r"(-?\d+(\.\d+)?)").unwrap();
+    let re =Regex::new(r"(-?\d+(\.\d+)?([eE][-+]?\d+)?)").unwrap();
 
     if let Some(caps) = re.captures(line) {
         let number = &caps[1];
