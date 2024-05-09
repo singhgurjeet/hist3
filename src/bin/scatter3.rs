@@ -111,7 +111,11 @@ impl eframe::App for PlotApp {
                 .show_grid(false)
                 .show_axes(false)
                 .show(ui, |plot_ui| {
-                    plot_ui.points(Points::new(self.data.lock().unwrap().clone()).radius(2.0));
+                    plot_ui.points(
+                        Points::new(self.data.lock().unwrap().clone())
+                            .radius(2.0)
+                            .name("1"),
+                    );
                 });
         });
     }
