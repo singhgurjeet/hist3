@@ -26,10 +26,21 @@ struct Args {
     /// Show axes?
     #[arg(long, short)]
     axes: bool,
+
+    /// Cumulative?
+    #[arg(long, short)]
+    cumulative: bool,
+
+    /// Ema?
+    #[arg(long, short)]
+    ema_alpha: Option<f64>,
 }
 
 fn main() -> Result<(), eframe::Error> {
     let args = Args::parse();
+    if args.cumulative && args.ema_alpha.is_some() {
+        panic!("cumulative and ema together are not supported, use one or the other");
+    }
 
     let plot = PlotApp::default().set_grid(args.grid).set_axes(args.axes);
     let data_ref = plot.data.clone();
@@ -48,12 +59,20 @@ fn main() -> Result<(), eframe::Error> {
             InputSource::FileName(file_name)
         };
 
+        let mut cumsum = 0.0;
+
         match input {
             InputSource::Stdin => {
                 let reader = std::io::stdin();
                 for line in reader.lines() {
                     if let Ok(line) = line {
-                        process_line(&data_ref, line);
+                        process_line(
+                            &data_ref,
+                            line,
+                            &mut cumsum,
+                            args.cumulative,
+                            args.ema_alpha,
+                        );
                     }
                 }
             }
@@ -62,7 +81,13 @@ fn main() -> Result<(), eframe::Error> {
                 let reader = io::BufReader::new(file);
                 for line in reader.lines() {
                     if let Ok(line) = line {
-                        process_line(&data_ref, line);
+                        process_line(
+                            &data_ref,
+                            line,
+                            &mut cumsum,
+                            args.cumulative,
+                            args.ema_alpha,
+                        );
                     }
                 }
             }
@@ -76,8 +101,26 @@ fn main() -> Result<(), eframe::Error> {
     eframe::run_native("Plot", options, Box::new(|_| Box::new(plot)))
 }
 
-fn process_line(data_ref: &Arc<Mutex<Vec<f64>>>, line: String) {
+fn process_line(
+    data_ref: &Arc<Mutex<Vec<f64>>>,
+    line: String,
+    cumsum: &mut f64,
+    cumulative: bool,
+    ema_alpha: Option<f64>,
+) {
     if let Ok(val) = line.parse::<f64>() {
+        let val = if cumulative {
+            *cumsum += val;
+            *cumsum
+        } else {
+            val
+        };
+        let val = if let Some(alpha) = ema_alpha {
+            *cumsum = alpha * val + (1.0 - alpha) * *cumsum;
+            *cumsum
+        } else {
+            val
+        };
         data_ref.lock().unwrap().push(val);
     }
 }
