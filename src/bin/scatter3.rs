@@ -1,69 +1,19 @@
-extern crate clap;
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
+
+extern crate egui_plot;
 
 use atty::Stream;
 use clap::Parser;
-use druid::widget::Align;
-use druid::{
-    AppLauncher, Command, DelegateCtx, Env, ExtEventSink, Handled, LocalizedString, Selector, Size,
-    Target, Widget, WindowDesc,
-};
+use eframe::egui;
+use egui_plot::{Legend, Plot, Points};
 use hist3::data::InputSource;
-use hist3::scatter_widget;
-use hist3::scatter_widget::AppState;
 use regex::Regex;
 use std::fs::File;
 use std::io::BufRead;
 use std::path::Path;
+use std::str::FromStr;
+use std::sync::{Arc, Mutex};
 use std::{io, thread};
-
-const NEW_DATA: Selector<(f64, f64)> = Selector::new("new_data");
-
-struct Delegate {
-    // eventsink: ExtEventSink,
-}
-
-impl Delegate {
-    fn new() -> Self {
-        Delegate {}
-    }
-}
-
-impl druid::AppDelegate<AppState> for Delegate {
-    fn command(
-        &mut self,
-        _ctx: &mut DelegateCtx,
-        _target: Target,
-        cmd: &Command,
-        data: &mut AppState,
-        _env: &Env,
-    ) -> Handled {
-        if let Some((x, y)) = cmd.get(NEW_DATA) {
-            if data.vals.len() == 0 {
-                data.x_min = *x;
-                data.x_max = *x;
-                data.y_min = *y;
-                data.y_max = *y;
-            }
-            data.vals.push_back((*x, *y));
-            if *x < data.x_min {
-                data.x_min = *x;
-            } else if *x > data.x_max {
-                data.x_max = *x;
-            }
-            if *y < data.y_min {
-                data.y_min = *y;
-            } else if *y > data.y_max {
-                data.y_max = *y;
-            }
-        }
-
-        Handled::Yes
-    }
-}
-
-fn build_main_window() -> impl Widget<AppState> {
-    Align::centered(scatter_widget::Scatter {})
-}
 
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about)]
@@ -72,88 +22,97 @@ struct Args {
     input: Option<String>,
 }
 
-pub fn main() {
+fn main() -> Result<(), eframe::Error> {
     let args = Args::parse();
 
-    let input = if !atty::is(Stream::Stdin) {
-        InputSource::Stdin
-    } else {
-        let file_name = args
-            .input
-            .expect("Input must either be piped in or provide a file")
-            .to_owned();
-        if !Path::new(&file_name).exists() {
-            panic!("File does not exist");
-        }
-        InputSource::FileName(file_name)
-    };
-    let main_window = WindowDesc::new(build_main_window)
-        .title(LocalizedString::new("Plot").with_placeholder("Scatter"))
-        .window_size(Size {
-            width: 800.0,
-            height: 600.0,
-        });
-    let app = AppLauncher::with_window(main_window);
-    let delegate = Delegate::new();
-    let sink = app.get_external_handle();
-    // let sink = delegate.eventsink.clone();
+    let plot = PlotApp::default();
+    let data_ref = plot.data.clone();
+
     thread::spawn(move || {
-        stream_numbers(input, sink);
+        let input = if !atty::is(Stream::Stdin) {
+            InputSource::Stdin
+        } else {
+            let file_name = args
+                .input
+                .expect("Input must either be piped in or provide a file")
+                .to_owned();
+            if !Path::new(&file_name).exists() {
+                panic!("File does not exist");
+            }
+            InputSource::FileName(file_name)
+        };
+
+        let re = Regex::new(r"[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?").unwrap();
+        // let mut floats = Vec::new();
+        //
+        // for cap in re.captures_iter(&s) {
+        //     let f = f64::from_str(&cap[0]).unwrap();
+        //     floats.push(f);
+        // }
+
+        match input {
+            InputSource::Stdin => {
+                let reader = std::io::stdin();
+                for line in reader.lines() {
+                    if let Ok(line) = line {
+                        process_line(&data_ref, &re, &line);
+                    }
+                }
+            }
+            InputSource::FileName(file_name) => {
+                let file = File::open(file_name).unwrap();
+                let reader = io::BufReader::new(file);
+                for line in reader.lines() {
+                    if let Ok(line) = line {
+                        process_line(&data_ref, &re, &line);
+                    }
+                }
+            }
+        };
     });
 
-    app.delegate(delegate)
-        // .use_simple_logger()
-        .launch(AppState::default())
-        .expect("launch failed");
-}
-
-pub fn stream_numbers(input: InputSource, sink: ExtEventSink) {
-    let mut line = String::new();
-
-    match input {
-        InputSource::Stdin => {
-            let reader = std::io::stdin();
-            loop {
-                match reader.read_line(&mut line) {
-                    Ok(bytes_read) => {
-                        if bytes_read == 0 {
-                            break;
-                        }
-                        process_line(&sink, &mut line);
-                    }
-                    Err(_) => {}
-                }
-            }
-        }
-        InputSource::FileName(file_name) => {
-            let file = File::open(file_name).unwrap();
-            let mut reader = io::BufReader::new(file);
-            loop {
-                match reader.read_line(&mut line) {
-                    Ok(bytes_read) => {
-                        if bytes_read == 0 {
-                            break;
-                        }
-                        process_line(&sink, &mut line);
-                    }
-                    Err(_) => {}
-                }
-            }
-        }
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default().with_inner_size([800.0, 600.0]),
+        ..Default::default()
     };
+    eframe::run_native("Plot", options, Box::new(|_| Box::new(plot)))
 }
 
-fn process_line(sink: &ExtEventSink, line: &mut String) {
-    let re = Regex::new(r"(-?\d+(\.\d+)?)\s+(-?\d+(\.\d+)?)").unwrap();
+fn process_line(data_ref: &Arc<Mutex<Vec<[f64; 2]>>>, re: &Regex, line: &String) {
+    let floats = re
+        .captures_iter(&line)
+        .map(|cap| f64::from_str(&cap[0]).unwrap())
+        .collect::<Vec<_>>();
+    let coords = floats.iter().rev().take(2).collect::<Vec<_>>();
+    if coords.len() == 2 {
+        data_ref.lock().unwrap().push([*coords[1], *coords[0]]);
+    }
+}
 
-    if let Some(caps) = re.captures(line) {
-        let sx = &caps[1];
-        let sy = &caps[3];
-        if let (Ok(x), Ok(y)) = (sx.parse::<f64>(), sy.parse::<f64>()) {
-            sink.submit_command(NEW_DATA, (x, y), Target::Auto)
-                .expect("command failed to submit");
+struct PlotApp {
+    data: Arc<Mutex<Vec<[f64; 2]>>>,
+}
+
+impl Default for PlotApp {
+    fn default() -> Self {
+        Self {
+            data: Arc::new(Mutex::new(Vec::new())),
         }
     }
+}
 
-    line.clear();
+impl eframe::App for PlotApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            Plot::new("")
+                .allow_boxed_zoom(true)
+                .allow_drag(false)
+                .legend(Legend::default())
+                .show_grid(false)
+                .show_axes(false)
+                .show(ui, |plot_ui| {
+                    plot_ui.points(Points::new(self.data.lock().unwrap().clone()).radius(2.0));
+                });
+        });
+    }
 }

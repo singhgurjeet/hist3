@@ -45,10 +45,7 @@ fn main() -> Result<(), eframe::Error> {
                 let reader = std::io::stdin();
                 for line in reader.lines() {
                     if let Ok(line) = line {
-                        data_ref
-                            .lock()
-                            .unwrap()
-                            .push(line.parse::<f64>().unwrap_or(0.0));
+                        process_line(&data_ref, line);
                     }
                 }
             }
@@ -57,10 +54,7 @@ fn main() -> Result<(), eframe::Error> {
                 let reader = io::BufReader::new(file);
                 for line in reader.lines() {
                     if let Ok(line) = line {
-                        data_ref
-                            .lock()
-                            .unwrap()
-                            .push(line.parse::<f64>().unwrap_or(0.0));
+                        process_line(&data_ref, line);
                     }
                 }
             }
@@ -72,6 +66,12 @@ fn main() -> Result<(), eframe::Error> {
         ..Default::default()
     };
     eframe::run_native("Plot", options, Box::new(|_| Box::new(plot)))
+}
+
+fn process_line(data_ref: &Arc<Mutex<Vec<f64>>>, line: String) {
+    if let Ok(val) = line.parse::<f64>() {
+        data_ref.lock().unwrap().push(val);
+    }
 }
 
 struct PlotApp {
