@@ -20,12 +20,20 @@ use std::{io, thread};
 struct Args {
     /// Input file
     input: Option<String>,
+
+    /// Show grid?
+    #[arg(long, short)]
+    grid: bool,
+
+    /// Show axes?
+    #[arg(long, short)]
+    axes: bool,
 }
 
 fn main() -> Result<(), eframe::Error> {
     let args = Args::parse();
 
-    let plot = PlotApp::default();
+    let plot = PlotApp::default().set_grid(args.grid).set_axes(args.axes);
     let data_ref = plot.data.clone();
 
     thread::spawn(move || {
@@ -43,13 +51,6 @@ fn main() -> Result<(), eframe::Error> {
         };
 
         let re = Regex::new(r"[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?").unwrap();
-        // let mut floats = Vec::new();
-        //
-        // for cap in re.captures_iter(&s) {
-        //     let f = f64::from_str(&cap[0]).unwrap();
-        //     floats.push(f);
-        // }
-
         match input {
             InputSource::Stdin => {
                 let reader = std::io::stdin();
@@ -91,13 +92,29 @@ fn process_line(data_ref: &Arc<Mutex<Vec<[f64; 2]>>>, re: &Regex, line: &String)
 
 struct PlotApp {
     data: Arc<Mutex<Vec<[f64; 2]>>>,
+    grid: bool,
+    axes: bool,
 }
 
 impl Default for PlotApp {
     fn default() -> Self {
         Self {
             data: Arc::new(Mutex::new(Vec::new())),
+            grid: false,
+            axes: false,
         }
+    }
+}
+
+impl PlotApp {
+    fn set_grid(mut self, grid: bool) -> Self {
+        self.grid = grid;
+        self
+    }
+
+    fn set_axes(mut self, axes: bool) -> Self {
+        self.axes = axes;
+        self
     }
 }
 
@@ -108,8 +125,8 @@ impl eframe::App for PlotApp {
                 .allow_boxed_zoom(true)
                 .allow_drag(false)
                 .legend(Legend::default())
-                .show_grid(false)
-                .show_axes(false)
+                .show_grid(self.grid)
+                .show_axes(self.axes)
                 .show(ui, |plot_ui| {
                     plot_ui.points(
                         Points::new(self.data.lock().unwrap().clone())
