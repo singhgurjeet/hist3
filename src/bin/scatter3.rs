@@ -5,7 +5,7 @@ extern crate egui_plot;
 use atty::Stream;
 use clap::Parser;
 use eframe::egui;
-use egui_plot::{Legend, Plot, Points};
+use egui_plot::{CoordinatesFormatter, Corner, Legend, Plot, Points};
 use hist3::data::InputSource;
 use regex::Regex;
 use std::fs::File;
@@ -121,19 +121,20 @@ impl PlotApp {
 impl eframe::App for PlotApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            Plot::new("")
+            let mut plot = Plot::new("")
                 .allow_boxed_zoom(true)
                 .allow_drag(false)
                 .legend(Legend::default())
                 .show_grid(self.grid)
-                .show_axes(self.axes)
-                .show(ui, |plot_ui| {
-                    plot_ui.points(
-                        Points::new(self.data.lock().unwrap().clone())
-                            .radius(2.0)
-                            .name("1"),
-                    );
-                });
+                .show_axes(self.axes);
+            plot = plot.coordinates_formatter(Corner::LeftBottom, CoordinatesFormatter::default());
+            plot.show(ui, |plot_ui| {
+                plot_ui.points(
+                    Points::new(self.data.lock().unwrap().clone())
+                        .radius(2.0)
+                        .name("1"),
+                );
+            });
         });
     }
 }
