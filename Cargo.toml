@@ -7,8 +7,6 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-# druid = {git="https://github.com/linebender/druid"}
-druid = {version = "0.7.0", features = ["im"]}
 atty = "0.2.14"
 itertools = "0.12.1"
 clap = { version = "4.5.4", features = ["derive"] }

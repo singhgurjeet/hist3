@@ -122,7 +122,7 @@ fn histogram_from_numbers(
         (0..*num_bars)
             .map(|i| {
                 (
-                    format!("{:.2}", min + (i as f64) * delta + 0.5 as f64),
+                    format!("{:.2}", min + ((i as f64 + 0.5) * delta )),
                     *existing_counts.get(&(i as usize)).unwrap_or(&(0 as usize)),
                 )
             })
