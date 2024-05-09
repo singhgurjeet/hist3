@@ -9,10 +9,10 @@ edition = "2018"
 [dependencies]
 # druid = {git="https://github.com/linebender/druid"}
 druid = {version = "0.7.0", features = ["im"]}
-atty = "0.2"
-itertools = "0.9.0"
-clap = "2.33.1"
-regex = "1.10.2"
+atty = "0.2.14"
+itertools = "0.12.1"
+clap = { version = "4.5.4", features = ["derive"] }
+regex = "1.10.4"
 egui = "0.27.2"
 eframe = "0.27.2"
 egui_plot = "0.27.2"

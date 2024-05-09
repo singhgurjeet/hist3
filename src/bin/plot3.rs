@@ -3,7 +3,7 @@
 extern crate egui_plot;
 
 use atty::Stream;
-use clap::clap_app;
+use clap::Parser;
 use eframe::egui;
 use egui_plot::{Legend, Line, Plot, PlotPoints};
 use hist3::data::InputSource;
@@ -13,13 +13,15 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::{io, thread};
 
+#[derive(clap::Parser, Debug)]
+#[command(author, version, about)]
+struct Args {
+    /// Input file
+    input: Option<String>,
+}
+
 fn main() -> Result<(), eframe::Error> {
-    let matches = clap_app!(myapp =>
-        (version: "0.1")
-        (about: "Simple line plot. Data must either be piped in or given as an argument")
-        (@arg INPUT: "Sets the input file to use")
-    )
-    .get_matches();
+    let args = Args::parse();
 
     let plot = PlotApp::default();
     let data_ref = plot.data.clone();
@@ -28,7 +30,10 @@ fn main() -> Result<(), eframe::Error> {
         let input = if !atty::is(Stream::Stdin) {
             InputSource::Stdin
         } else {
-            let file_name = matches.value_of("INPUT").expect("No input").to_owned();
+            let file_name = args
+                .input
+                .expect("Input must either be piped in or provide a file")
+                .to_owned();
             if !Path::new(&file_name).exists() {
                 panic!("File does not exist");
             }

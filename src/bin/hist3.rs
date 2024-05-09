@@ -1,7 +1,7 @@
-#[macro_use]
 extern crate clap;
 
 use atty::Stream;
+use clap::Parser;
 use druid::widget::prelude::*;
 use druid::widget::{Align, Either, Label};
 use druid::{
@@ -91,31 +91,36 @@ fn build_main_window() -> impl Widget<AppState> {
     Align::centered(either)
 }
 
+#[derive(clap::Parser, Debug)]
+#[command(author, version, about)]
+struct Args {
+    /// Input file
+    input: Option<String>,
+
+    /// Number of bins
+    #[arg(short, long, default_value_t = 20)]
+    bins: usize,
+}
+
 pub fn main() {
-    let matches = clap_app!(myapp =>
-                (version: "0.1")
-                (about: "Plot the distribution of input. Data must either be piped in or given as an argument")
-                (@arg BINS: -b --bins +takes_value "The number of bins in the histogram")
-                (@arg INPUT: "Sets the input file to use")
-                (@arg title: --title +takes_value default_value("Plot") "Sets the custom title for the plot window")
-            ).get_matches();
+    let args = Args::parse();
+
     let input = if !atty::is(Stream::Stdin) {
         InputSource::Stdin
     } else {
-        let file_name = matches.value_of("INPUT").expect("No input").to_owned();
+        let file_name = args
+            .input
+            .expect("Input must either be piped in or provide a file")
+            .to_owned();
         if !Path::new(&file_name).exists() {
             panic!("File does not exist");
         }
         InputSource::FileName(file_name)
     };
-    let num_bins = matches
-        .value_of("BINS")
-        .unwrap_or("20")
-        .parse::<usize>()
-        .unwrap();
+    let num_bins = args.bins;
 
     let main_window = WindowDesc::new(build_main_window)
-        .title(LocalizedString::new("Plot").with_placeholder(matches.value_of("title").unwrap()))
+        .title(LocalizedString::new("Plot").with_placeholder("Histogram"))
         .window_size(Size {
             width: 800.0,
             height: 600.0,
