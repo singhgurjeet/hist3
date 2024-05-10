@@ -5,7 +5,7 @@ extern crate egui_plot;
 use atty::Stream;
 use clap::Parser;
 use eframe::egui;
-use egui_plot::{Bar, BarChart, Legend, Line, Plot, PlotPoints};
+use egui_plot::{Bar, BarChart, Legend, Plot};
 use hist3::data;
 use hist3::data::InputSource;
 use std::path::Path;
@@ -48,12 +48,6 @@ fn main() -> Result<(), eframe::Error> {
         ..Default::default()
     };
     eframe::run_native("Plot", options, Box::new(|_| Box::new(plot)))
-}
-
-fn process_line(data_ref: &mut Vec<f64>, line: String) {
-    if let Ok(val) = line.parse::<f64>() {
-        data_ref.push(val);
-    }
 }
 
 struct PlotApp {

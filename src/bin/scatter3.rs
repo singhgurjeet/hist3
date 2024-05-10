@@ -7,7 +7,7 @@ use clap::Parser;
 use eframe::egui;
 use egui_plot::{CoordinatesFormatter, Corner, Legend, Plot, Points};
 use hist3::data::InputSource;
-use regex::Regex;
+use hist3::NUMRE;
 use std::fs::File;
 use std::io::BufRead;
 use std::path::Path;
@@ -50,13 +50,12 @@ fn main() -> Result<(), eframe::Error> {
             InputSource::FileName(file_name)
         };
 
-        let re = Regex::new(r"[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?").unwrap();
         match input {
             InputSource::Stdin => {
                 let reader = std::io::stdin();
                 for line in reader.lines() {
                     if let Ok(line) = line {
-                        process_line(&data_ref, &re, &line);
+                        process_line(&data_ref, &line);
                     }
                 }
             }
@@ -65,7 +64,7 @@ fn main() -> Result<(), eframe::Error> {
                 let reader = io::BufReader::new(file);
                 for line in reader.lines() {
                     if let Ok(line) = line {
-                        process_line(&data_ref, &re, &line);
+                        process_line(&data_ref, &line);
                     }
                 }
             }
@@ -79,8 +78,8 @@ fn main() -> Result<(), eframe::Error> {
     eframe::run_native("Plot", options, Box::new(|_| Box::new(plot)))
 }
 
-fn process_line(data_ref: &Arc<Mutex<Vec<[f64; 2]>>>, re: &Regex, line: &String) {
-    let floats = re
+fn process_line(data_ref: &Arc<Mutex<Vec<[f64; 2]>>>, line: &String) {
+    let floats = NUMRE
         .captures_iter(&line)
         .map(|cap| f64::from_str(&cap[0]).unwrap())
         .collect::<Vec<_>>();

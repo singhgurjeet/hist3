@@ -7,6 +7,7 @@ use clap::Parser;
 use eframe::egui;
 use egui_plot::{CoordinatesFormatter, Corner, Legend, Line, Plot, PlotPoints};
 use hist3::data::InputSource;
+use hist3::NUMRE;
 use std::fs::File;
 use std::io::BufRead;
 use std::path::Path;
@@ -26,21 +27,10 @@ struct Args {
     /// Show axes?
     #[arg(long, short)]
     axes: bool,
-
-    /// Cumulative?
-    #[arg(long, short)]
-    cumulative: bool,
-
-    /// Ema?
-    #[arg(long, short)]
-    ema_alpha: Option<f64>,
 }
 
 fn main() -> Result<(), eframe::Error> {
     let args = Args::parse();
-    if args.cumulative && args.ema_alpha.is_some() {
-        panic!("cumulative and ema together are not supported, use one or the other");
-    }
 
     let plot = PlotApp::default().set_grid(args.grid).set_axes(args.axes);
     let data_ref = plot.data.clone();
@@ -59,20 +49,12 @@ fn main() -> Result<(), eframe::Error> {
             InputSource::FileName(file_name)
         };
 
-        let mut cumsum = 0.0;
-
         match input {
             InputSource::Stdin => {
                 let reader = std::io::stdin();
                 for line in reader.lines() {
                     if let Ok(line) = line {
-                        process_line(
-                            &data_ref,
-                            line,
-                            &mut cumsum,
-                            args.cumulative,
-                            args.ema_alpha,
-                        );
+                        process_line(&data_ref, line);
                     }
                 }
             }
@@ -81,13 +63,7 @@ fn main() -> Result<(), eframe::Error> {
                 let reader = io::BufReader::new(file);
                 for line in reader.lines() {
                     if let Ok(line) = line {
-                        process_line(
-                            &data_ref,
-                            line,
-                            &mut cumsum,
-                            args.cumulative,
-                            args.ema_alpha,
-                        );
+                        process_line(&data_ref, line);
                     }
                 }
             }
@@ -101,34 +77,22 @@ fn main() -> Result<(), eframe::Error> {
     eframe::run_native("Plot", options, Box::new(|_| Box::new(plot)))
 }
 
-fn process_line(
-    data_ref: &Arc<Mutex<Vec<f64>>>,
-    line: String,
-    cumsum: &mut f64,
-    cumulative: bool,
-    ema_alpha: Option<f64>,
-) {
-    if let Ok(val) = line.parse::<f64>() {
-        let val = if cumulative {
-            *cumsum += val;
-            *cumsum
-        } else {
-            val
-        };
-        let val = if let Some(alpha) = ema_alpha {
-            *cumsum = alpha * val + (1.0 - alpha) * *cumsum;
-            *cumsum
-        } else {
-            val
-        };
-        data_ref.lock().unwrap().push(val);
+fn process_line(data_ref: &Arc<Mutex<Vec<Vec<f64>>>>, line: String) {
+    let floats = NUMRE
+        .captures_iter(&line)
+        .map(|cap| cap[0].parse::<f64>().unwrap())
+        .collect::<Vec<_>>();
+    if floats.len() > 0 {
+        data_ref.lock().unwrap().push(floats);
     }
 }
 
 struct PlotApp {
-    data: Arc<Mutex<Vec<f64>>>,
+    data: Arc<Mutex<Vec<Vec<f64>>>>,
     grid: bool,
     axes: bool,
+    cums: Vec<bool>,
+    box_width: Vec<usize>,
 }
 
 impl Default for PlotApp {
@@ -137,6 +101,8 @@ impl Default for PlotApp {
             data: Arc::new(Mutex::new(Vec::new())),
             grid: false,
             axes: false,
+            cums: Vec::new(),
+            box_width: Vec::new(),
         }
     }
 }
@@ -155,7 +121,32 @@ impl PlotApp {
 
 impl eframe::App for PlotApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if self.data.lock().unwrap().len() == 0 {
+            return;
+        }
+        let num_series = self.data.lock().unwrap()[0].len();
+        while self.cums.len() < num_series {
+            self.cums.push(false);
+            self.box_width.push(1);
+        }
         egui::CentralPanel::default().show(ctx, |ui| {
+            ui.vertical(|ui| {
+                for i in 0..num_series {
+                    ui.with_layout(egui::Layout::top_down(egui::Align::RIGHT), |ui| {
+                        ui.group(|ui| {
+                            ui.horizontal(|ui| {
+                                ui.checkbox(&mut self.cums[i], format!("Cumulative {}", i));
+                                ui.label("Averaging");
+                                ui.add(
+                                    egui::DragValue::new(&mut self.box_width[i])
+                                        .clamp_range(1..=500),
+                                )
+                            })
+                        })
+                    });
+                }
+            });
+
             let mut plot = Plot::new("")
                 .allow_boxed_zoom(true)
                 .allow_drag(false)
@@ -164,9 +155,48 @@ impl eframe::App for PlotApp {
                 .show_axes(self.axes);
             plot = plot.coordinates_formatter(Corner::LeftBottom, CoordinatesFormatter::default());
             plot.show(ui, |plot_ui| {
-                plot_ui
-                    .line(Line::new(PlotPoints::from_ys_f64(&self.data.lock().unwrap())).name("1"))
+                for i in 0..num_series {
+                    plot_ui.line(
+                        Line::new(PlotPoints::from_ys_f64(&make_series(
+                            &self.data.lock().unwrap(),
+                            i,
+                            self.box_width[i],
+                            self.cums[i],
+                        )))
+                        .name(format!("{}", i)),
+                    )
+                }
             });
         });
     }
+}
+
+fn make_series(
+    data: &Vec<Vec<f64>>,
+    series_idx: usize,
+    width: usize,
+    cumulative: bool,
+) -> Vec<f64> {
+    data.iter()
+        .enumerate()
+        .map(|(i, _)| {
+            if width > 1 {
+                let start = if i >= width / 2 { i - width / 2 } else { 0 };
+                let end = std::cmp::min(data.len(), i + width / 2 + 1);
+                let sum: f64 = data[start..end].iter().map(|v| v[series_idx]).sum();
+                let count = end - start;
+                sum / count as f64
+            } else {
+                data[i][series_idx]
+            }
+        })
+        .scan(0.0, |cum, v| {
+            if cumulative {
+                *cum += v;
+                Some(*cum)
+            } else {
+                Some(v)
+            }
+        })
+        .collect()
 }
