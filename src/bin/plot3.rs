@@ -92,6 +92,7 @@ struct PlotApp {
     grid: bool,
     axes: bool,
     cums: Vec<bool>,
+    normalize: Vec<bool>,
     box_width: Vec<usize>,
 }
 
@@ -102,6 +103,7 @@ impl Default for PlotApp {
             grid: false,
             axes: false,
             cums: Vec::new(),
+            normalize: Vec::new(),
             box_width: Vec::new(),
         }
     }
@@ -127,6 +129,7 @@ impl eframe::App for PlotApp {
         let num_series = self.data.lock().unwrap()[0].len();
         while self.cums.len() < num_series {
             self.cums.push(false);
+            self.normalize.push(false);
             self.box_width.push(1);
         }
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -135,12 +138,14 @@ impl eframe::App for PlotApp {
                     ui.with_layout(egui::Layout::top_down(egui::Align::RIGHT), |ui| {
                         ui.group(|ui| {
                             ui.horizontal(|ui| {
-                                ui.checkbox(&mut self.cums[i], format!("Cumulative {}", i));
-                                ui.label("Averaging");
+                                ui.checkbox(&mut self.cums[i], "Cumulative");
                                 ui.add(
                                     egui::DragValue::new(&mut self.box_width[i])
                                         .clamp_range(1..=500),
-                                )
+                                );
+                                ui.label("Averaging");
+                                ui.checkbox(&mut self.normalize[i], "Normalize");
+                                ui.heading(format!("{}", i));
                             })
                         })
                     });
@@ -162,6 +167,7 @@ impl eframe::App for PlotApp {
                             i,
                             self.box_width[i],
                             self.cums[i],
+                            self.normalize[i],
                         )))
                         .name(format!("{}", i)),
                     )
@@ -176,18 +182,43 @@ fn make_series(
     series_idx: usize,
     width: usize,
     cumulative: bool,
+    normalize: bool,
 ) -> Vec<f64> {
+    let min = data
+        .iter()
+        .map(|v| v[series_idx])
+        .min_by(|a, b| a.total_cmp(b))
+        .unwrap();
+    let max = data
+        .iter()
+        .map(|v| v[series_idx])
+        .max_by(|a, b| a.total_cmp(b))
+        .unwrap();
+    let range = max - min;
     data.iter()
         .enumerate()
         .map(|(i, _)| {
             if width > 1 {
                 let start = if i >= width / 2 { i - width / 2 } else { 0 };
                 let end = std::cmp::min(data.len(), i + width / 2 + 1);
-                let sum: f64 = data[start..end].iter().map(|v| v[series_idx]).sum();
+                let sum: f64 = data[start..end]
+                    .iter()
+                    .map(|v| {
+                        if normalize {
+                            ((v[series_idx] - min) / range) * 2.0 - 1.0
+                        } else {
+                            v[series_idx]
+                        }
+                    })
+                    .sum();
                 let count = end - start;
                 sum / count as f64
             } else {
-                data[i][series_idx]
+                if normalize {
+                    ((data[i][series_idx] - min) / range) * 2.0 - 1.0
+                } else {
+                    data[i][series_idx]
+                }
             }
         })
         .scan(0.0, |cum, v| {
