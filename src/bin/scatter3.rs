@@ -20,20 +20,12 @@ use std::{io, thread};
 struct Args {
     /// Input file
     input: Option<String>,
-
-    /// Show grid?
-    #[arg(long, short)]
-    grid: bool,
-
-    /// Show axes?
-    #[arg(long, short)]
-    axes: bool,
 }
 
 fn main() -> Result<(), eframe::Error> {
     let args = Args::parse();
 
-    let plot = PlotApp::default().set_grid(args.grid).set_axes(args.axes);
+    let plot = PlotApp::default().set_grid(true).set_axes(true);
     let data_ref = plot.data.clone();
 
     thread::spawn(move || {
