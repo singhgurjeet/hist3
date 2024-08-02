@@ -19,13 +19,25 @@ use std::{io, thread};
 struct Args {
     /// Input file
     input: Option<String>,
+
+    /// Title
+    #[arg(long, short, default_value = "Plot")]
+    title: String,
+
+    /// Series Names
+    #[arg(short, long)]
+    series: Vec<String>,
 }
 
 fn main() -> Result<(), eframe::Error> {
     let args = Args::parse();
 
-    let plot = PlotApp::default().set_grid(true).set_axes(true);
+    let plot = PlotApp::default()
+        .set_series_names(args.series.clone())
+        .set_grid(true)
+        .set_axes(true);
     let data_ref = plot.data.clone();
+    let title = args.title.clone();
 
     thread::spawn(move || {
         let input = if !atty::is(Stream::Stdin) {
@@ -66,7 +78,7 @@ fn main() -> Result<(), eframe::Error> {
         viewport: egui::ViewportBuilder::default().with_inner_size([800.0, 600.0]),
         ..Default::default()
     };
-    eframe::run_native("Plot", options, Box::new(|_| Box::new(plot)))
+    eframe::run_native(title.as_str(), options, Box::new(|_| Box::new(plot)))
 }
 
 fn process_line(data_ref: &Arc<Mutex<Vec<Vec<f64>>>>, line: String) {
@@ -86,6 +98,7 @@ struct PlotApp {
     cums: Vec<bool>,
     normalize: Vec<bool>,
     box_width: Vec<usize>,
+    series_names: Vec<String>,
 }
 
 impl Default for PlotApp {
@@ -97,6 +110,7 @@ impl Default for PlotApp {
             cums: Vec::new(),
             normalize: Vec::new(),
             box_width: Vec::new(),
+            series_names: Vec::new(),
         }
     }
 }
@@ -109,6 +123,11 @@ impl PlotApp {
 
     fn set_axes(mut self, axes: bool) -> Self {
         self.axes = axes;
+        self
+    }
+
+    fn set_series_names(mut self, series_names: Vec<String>) -> Self {
+        self.series_names = series_names;
         self
     }
 }
@@ -137,7 +156,10 @@ impl eframe::App for PlotApp {
                                 );
                                 ui.label("Averaging");
                                 ui.checkbox(&mut self.normalize[i], "Normalize");
-                                ui.heading(format!("{}", i));
+                                ui.heading(format!(
+                                    "{}",
+                                    self.series_names.get(i).unwrap_or(&format!("{}", i))
+                                ));
                             })
                         })
                     });
@@ -161,7 +183,10 @@ impl eframe::App for PlotApp {
                             self.cums[i],
                             self.normalize[i],
                         )))
-                        .name(format!("{}", i)),
+                        .name(format!(
+                            "{}",
+                            self.series_names.get(i).unwrap_or(&format!("{}", i))
+                        )),
                     )
                 }
             });
