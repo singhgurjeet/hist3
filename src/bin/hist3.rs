@@ -19,10 +19,15 @@ struct Args {
     /// Show grid?
     #[arg(long, short, default_value_t = 20)]
     bins: usize,
+
+    /// Title
+    #[arg(long, short, default_value = "Histogram")]
+    title: String,
 }
 
 fn main() -> Result<(), eframe::Error> {
     let args = Args::parse();
+    let title = args.title.clone();
 
     let input = if !atty::is(Stream::Stdin) {
         InputSource::Stdin
@@ -47,7 +52,7 @@ fn main() -> Result<(), eframe::Error> {
         viewport: egui::ViewportBuilder::default().with_inner_size([800.0, 600.0]),
         ..Default::default()
     };
-    eframe::run_native("Plot", options, Box::new(|_| Box::new(plot)))
+    eframe::run_native(title.as_str(), options, Box::new(|_| Box::new(plot)))
 }
 
 struct PlotApp {

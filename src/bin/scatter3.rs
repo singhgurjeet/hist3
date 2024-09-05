@@ -20,10 +20,15 @@ use std::{io, thread};
 struct Args {
     /// Input file
     input: Option<String>,
+
+    /// Title
+    #[arg(long, short, default_value = "Histogram")]
+    title: String,
 }
 
 fn main() -> Result<(), eframe::Error> {
     let args = Args::parse();
+    let title = args.title.clone();
 
     let plot = PlotApp::default().set_grid(true).set_axes(true);
     let data_ref = plot.data.clone();
@@ -67,7 +72,7 @@ fn main() -> Result<(), eframe::Error> {
         viewport: egui::ViewportBuilder::default().with_inner_size([800.0, 600.0]),
         ..Default::default()
     };
-    eframe::run_native("Plot", options, Box::new(|_| Box::new(plot)))
+    eframe::run_native(title.as_str(), options, Box::new(|_| Box::new(plot)))
 }
 
 fn process_line(data_ref: &Arc<Mutex<Vec<[f64; 2]>>>, line: &String) {
