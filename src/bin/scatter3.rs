@@ -72,7 +72,7 @@ fn main() -> Result<(), eframe::Error> {
         viewport: egui::ViewportBuilder::default().with_inner_size([800.0, 600.0]),
         ..Default::default()
     };
-    eframe::run_native(title.as_str(), options, Box::new(|_| Box::new(plot)))
+    eframe::run_native(title.as_str(), options, Box::new(|_| Ok(Box::new(plot))))
 }
 
 fn process_line(data_ref: &Arc<Mutex<Vec<[f64; 2]>>>, line: &String) {
