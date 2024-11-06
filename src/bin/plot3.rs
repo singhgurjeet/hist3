@@ -96,7 +96,7 @@ struct PlotApp {
     grid: bool,
     axes: bool,
     cums: Vec<bool>,
-    normalize: Vec<bool>,
+    zscore: Vec<bool>,
     box_width: Vec<usize>,
     series_names: Vec<String>,
 }
@@ -108,7 +108,7 @@ impl Default for PlotApp {
             grid: false,
             axes: false,
             cums: Vec::new(),
-            normalize: Vec::new(),
+            zscore: Vec::new(),
             box_width: Vec::new(),
             series_names: Vec::new(),
         }
@@ -140,7 +140,7 @@ impl eframe::App for PlotApp {
         let num_series = self.data.lock().unwrap()[0].len();
         while self.cums.len() < num_series {
             self.cums.push(false);
-            self.normalize.push(false);
+            self.zscore.push(false);
             self.box_width.push(1);
         }
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -155,7 +155,7 @@ impl eframe::App for PlotApp {
                                         .range(1..=50000),
                                 );
                                 ui.label("Averaging");
-                                ui.checkbox(&mut self.normalize[i], "Normalize");
+                                ui.checkbox(&mut self.zscore[i], "Z-Score");
                                 ui.heading(format!(
                                     "{}",
                                     self.series_names.get(i).unwrap_or(&format!("{}", i))
@@ -181,7 +181,7 @@ impl eframe::App for PlotApp {
                             i,
                             self.box_width[i],
                             self.cums[i],
-                            self.normalize[i],
+                            self.zscore[i],
                         )))
                         .name(format!(
                             "{}",
@@ -201,17 +201,22 @@ fn make_series(
     cumulative: bool,
     normalize: bool,
 ) -> Vec<f64> {
-    let min = data
+    // let min = data
+    //     .iter()
+    //     .map(|v| v[series_idx])
+    //     .min_by(|a, b| a.total_cmp(b))
+    //     .unwrap();
+    // let max = data
+    //     .iter()
+    //     .map(|v| v[series_idx])
+    //     .max_by(|a, b| a.total_cmp(b))
+    //     .unwrap();
+    // let range = max - min;
+    let vv = data
         .iter()
         .map(|v| v[series_idx])
-        .min_by(|a, b| a.total_cmp(b))
-        .unwrap();
-    let max = data
-        .iter()
-        .map(|v| v[series_idx])
-        .max_by(|a, b| a.total_cmp(b))
-        .unwrap();
-    let range = max - min;
+        .collect::<Vec<_>>();
+    let (mean, std) = mean_std(&vv);
     data.iter()
         .enumerate()
         .map(|(i, _)| {
@@ -222,7 +227,7 @@ fn make_series(
                     .iter()
                     .map(|v| {
                         if normalize {
-                            ((v[series_idx] - min) / range) * 2.0 - 1.0
+                            ((v[series_idx] - mean) / std) * 2.0 - 1.0
                         } else {
                             v[series_idx]
                         }
@@ -232,7 +237,7 @@ fn make_series(
                 sum / count as f64
             } else {
                 if normalize {
-                    ((data[i][series_idx] - min) / range) * 2.0 - 1.0
+                    ((data[i][series_idx] - mean) / std) * 2.0 - 1.0
                 } else {
                     data[i][series_idx]
                 }
@@ -247,4 +252,27 @@ fn make_series(
             }
         })
         .collect()
+}
+
+pub fn mean_std(data: &[f64]) -> (f64, f64) {
+    let mut n = 0.0;
+    let mut mean = 0.0;
+    let mut m2 = 0.0; // Sum of squares of differences from the current mean
+
+    for &x in data {
+        n += 1.0;
+        let delta = x - mean;
+        mean += delta / n;
+        let delta2 = x - mean;
+        m2 += delta * delta2;
+    }
+
+    let variance = if n < 2.0 {
+        0.0
+    } else {
+        m2 / (n - 1.0) // Unbiased estimator for variance
+    };
+    let std_dev = variance.sqrt();
+
+    (mean, std_dev)
 }
