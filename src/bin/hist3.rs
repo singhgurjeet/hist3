@@ -16,7 +16,7 @@ struct Args {
     /// Input file
     input: Option<String>,
 
-    /// Show grid?
+    /// Number of bins
     #[arg(long, short, default_value_t = 20)]
     bins: usize,
 
@@ -42,11 +42,10 @@ fn main() -> Result<(), eframe::Error> {
         InputSource::FileName(file_name)
     };
 
-    let (labels_and_counts, p_25, p_50, p_75, total) = data::compute_histogram(args.bins, input);
+    let (labels_and_counts, p_25, p_50, p_75, total, range) =
+        data::compute_histogram(args.bins, input);
 
-    let plot = PlotApp::new(labels_and_counts, p_25, p_50, p_75, total)
-        .set_grid(false)
-        .set_axes(false);
+    let plot = PlotApp::new(labels_and_counts, p_25, p_50, p_75, total, range, args.bins);
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([800.0, 600.0]),
@@ -61,6 +60,8 @@ struct PlotApp {
     p_50: Option<(f64, f64)>,
     p_75: Option<(f64, f64)>,
     total: f64,
+    range: f64,
+    num_bins: usize,
     grid: bool,
     axes: bool,
 }
@@ -72,6 +73,8 @@ impl PlotApp {
         p_50: Option<(f64, f64)>,
         p_75: Option<(f64, f64)>,
         total: f64,
+        range: f64,
+        num_bins: usize,
     ) -> Self {
         PlotApp {
             data,
@@ -79,8 +82,10 @@ impl PlotApp {
             p_50,
             p_75,
             total,
-            grid: false,
-            axes: false,
+            range,
+            num_bins,
+            grid: true,
+            axes: true,
         }
     }
 
@@ -97,11 +102,24 @@ impl PlotApp {
 
 impl eframe::App for PlotApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        let width = if self.p_25.is_some() {
+            self.range / self.num_bins as f64
+        } else {
+            1.0
+        };
         let chart = BarChart::new(
             self.data
                 .iter()
                 .enumerate()
-                .map(|(i, (label, count))| Bar::new(i as f64, *count as f64).width(1.0).name(label))
+                .map(|(i, (label, count))| {
+                    if self.p_25.is_some() {
+                        Bar::new(label.parse::<f64>().unwrap(), *count as f64)
+                            .width(width)
+                            .name(label)
+                    } else {
+                        Bar::new(i as f64, *count as f64).width(1.0).name(label)
+                    }
+                })
                 .collect(),
         );
 

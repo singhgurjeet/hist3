@@ -47,6 +47,7 @@ fn histogram_from_categories(
     Option<(f64, f64)>,
     Option<(f64, f64)>,
     f64,
+    f64,
 ) {
     let ret: Vec<(String, usize)> = vals
         .iter()
@@ -57,7 +58,7 @@ fn histogram_from_categories(
         .sorted_by(|(_, i), (_, j)| i.cmp(j))
         .collect();
     let total = ret.iter().fold(0.0, |t, (_s, x)| t + *x as f64);
-    (ret, None, None, None, total)
+    (ret, None, None, None, total, 1.0)
 }
 
 /// Generates a histogram from a vector of numerical string values.
@@ -98,6 +99,7 @@ fn histogram_from_numbers(
     Option<(f64, f64)>,
     Option<(f64, f64)>,
     f64,
+    f64,
 ) {
     let sorted_nums = vals
         .iter()
@@ -137,6 +139,7 @@ fn histogram_from_numbers(
             sorted_nums[len_25 * 3],
         )),
         total,
+        range,
     )
 }
 
@@ -148,6 +151,7 @@ pub fn compute_histogram(
     Option<(f64, f64)>,
     Option<(f64, f64)>,
     Option<(f64, f64)>,
+    f64,
     f64,
 ) {
     let max_num_lines = 10_000_000;
