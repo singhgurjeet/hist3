@@ -146,6 +146,7 @@ fn histogram_from_numbers(
 pub fn compute_histogram(
     num_bins: usize,
     input: InputSource,
+    categorical: bool,
 ) -> (
     Vec<(String, usize)>,
     Option<(f64, f64)>,
@@ -161,11 +162,7 @@ pub fn compute_histogram(
         InputSource::FileName(file_name) => read_from_file(&file_name, max_num_lines),
     };
 
-    let mostly_string = is_mostly_strings(&vals);
-
-    let num_uniques = vals.iter().unique().count();
-
-    if mostly_string || num_uniques < num_bins {
+    if categorical {
         histogram_from_categories(&vals)
     } else {
         histogram_from_numbers(&vals, &num_bins)

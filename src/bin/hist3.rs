@@ -16,6 +16,10 @@ struct Args {
     /// Input file
     input: Option<String>,
 
+    /// Categorical input
+    #[arg(long, short)]
+    categorical: bool,
+
     /// Number of bins
     #[arg(long, short, default_value_t = 20)]
     bins: usize,
@@ -43,7 +47,7 @@ fn main() -> Result<(), eframe::Error> {
     };
 
     let (labels_and_counts, p_25, p_50, p_75, total, range) =
-        data::compute_histogram(args.bins, input);
+        data::compute_histogram(args.bins, input, args.categorical);
 
     let plot = PlotApp::new(labels_and_counts, p_25, p_50, p_75, total, range, args.bins);
 
