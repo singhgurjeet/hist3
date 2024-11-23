@@ -283,6 +283,24 @@ impl GraphVisualizerApp {
         // Update velocities and positions
         let mut max_movement = 0.0_f32;
         for component in &self.components {
+            // Calculate average velocity for the component
+            let mut avg_velocity = Vec2::ZERO;
+            let mut node_count = 0;
+
+            for &node_idx in component {
+                if self.is_dragging != Some(node_idx) {
+                    if let Some(&velocity) = self.velocities.get(&node_idx) {
+                        avg_velocity += velocity;
+                        node_count += 1;
+                    }
+                }
+            }
+
+            if node_count > 0 {
+                avg_velocity /= node_count as f32;
+            }
+
+            // Update velocities and positions with correction
             for &node_idx in component {
                 if self.is_dragging == Some(node_idx) {
                     continue;
@@ -293,6 +311,9 @@ impl GraphVisualizerApp {
 
                 // Update velocity with damping
                 *velocity = (*velocity + force) * DAMPING;
+
+                // Subtract average component velocity to prevent drift
+                *velocity -= avg_velocity;
 
                 // Limit velocity
                 if velocity.length() > MAX_VELOCITY {
