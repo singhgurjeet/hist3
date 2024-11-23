@@ -58,6 +58,17 @@ impl Default for GraphVisualizerApp {
 
 impl eframe::App for GraphVisualizerApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Get the full window size before creating any panels
+        let window_size = ctx.available_rect().size();
+
+        // Handle keyboard input
+        if ctx.input(|i| i.key_pressed(egui::Key::H)) {
+            self.fit_to_view(window_size);
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::Space)) {
+            self.running_simulation = !self.running_simulation;
+        }
+
         if !self.initialized {
             let graph = self.graph_data.lock().unwrap();
             if !graph.node_indices().next().is_none() {
@@ -71,9 +82,6 @@ impl eframe::App for GraphVisualizerApp {
             self.update_layout();
             ctx.request_repaint();
         }
-
-        // Get the full window size before creating any panels
-        let window_size = ctx.available_rect().size();
 
         egui::TopBottomPanel::top("controls").show(ctx, |ui| {
             ui.horizontal(|ui| {
@@ -176,13 +184,45 @@ impl eframe::App for GraphVisualizerApp {
                                 Color32::from_rgb(0, 100, 255),
                             );
 
-                            // Scale font size with zoom
+                            // Calculate text position and dimensions
                             let font_size = 14.0 * self.zoom_level;
+                            let font = egui::FontId::proportional(font_size);
+                            let text_padding = 4.0 * self.zoom_level; // Padding around text
+                            let circle_spacing = 10.0 * self.zoom_level; // Increased space between circle and text
+
+                            // Calculate text dimensions
+                            let galley = painter.layout_no_wrap(
+                                node.to_string(),
+                                font.clone(),
+                                Color32::WHITE,
+                            );
+
+                            // Calculate background rectangle position and size
+                            let text_pos = Pos2::new(
+                                screen_pos.x + node_radius + stroke_width + circle_spacing,
+                                screen_pos.y,
+                            );
+                            let rect = egui::Rect::from_center_size(
+                                Pos2::new(text_pos.x + galley.size().x / 2.0, text_pos.y),
+                                egui::Vec2::new(
+                                    galley.size().x + text_padding * 2.0,
+                                    galley.size().y + text_padding * 2.0,
+                                ),
+                            );
+
+                            // Draw background with 90% opacity
+                            painter.rect_filled(
+                                rect,
+                                4.0, // radius for rounded corners
+                                Color32::from_black_alpha(200),
+                            );
+
+                            // Draw text
                             painter.text(
-                                screen_pos,
-                                egui::Align2::CENTER_CENTER,
+                                text_pos,
+                                egui::Align2::LEFT_CENTER,
                                 node,
-                                egui::FontId::proportional(font_size),
+                                font,
                                 Color32::WHITE,
                             );
                         }
