@@ -4,7 +4,7 @@ use eframe::egui;
 use egui::{Color32, Pos2, Stroke, Vec2};
 use petgraph::graph::{Graph, NodeIndex};
 use petgraph::Undirected;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{self, BufRead};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -287,32 +287,47 @@ fn parse_input(
     positions_ref: &Arc<Mutex<HashMap<NodeIndex, Pos2>>>,
     input: &str,
 ) {
-    let edges = input.lines().map(parse_edge).collect::<Vec<_>>();
+    // First, collect all unique nodes and edges
+    let mut unique_nodes = HashSet::new();
+    let mut edges = Vec::new();
+
+    for line in input.lines() {
+        let (node1, node2) = parse_edge(line);
+        unique_nodes.insert(node1.clone());
+        unique_nodes.insert(node2.clone());
+        edges.push((node1, node2));
+    }
+
     let mut graph = graph_ref.lock().unwrap();
     let mut positions = positions_ref.lock().unwrap();
     let mut node_indices = HashMap::new();
 
-    let angle_step = 2.0 * std::f32::consts::PI / (edges.len().max(1) as f32);
+    // Create nodes in a circular layout
+    let node_count = unique_nodes.len();
+    let angle_step = 2.0 * std::f32::consts::PI / (node_count.max(1) as f32);
     let mut angle = 0.0_f32;
+    let radius = 200.0;
+    let center_x = 400.0;
+    let center_y = 300.0;
 
+    // First pass: create all nodes
+    for node_name in unique_nodes {
+        let index = graph.add_node(node_name.clone());
+        let x = radius * angle.cos() + center_x;
+        let y = radius * angle.sin() + center_y;
+        positions.insert(index, Pos2::new(x, y));
+        node_indices.insert(node_name, index);
+        angle += angle_step;
+    }
+
+    // Second pass: create all edges
     for (node1, node2) in edges {
-        let node1_index = *node_indices.entry(node1.clone()).or_insert_with(|| {
-            let index = graph.add_node(node1);
-            let position = Pos2::new(angle.cos() * 200.0 + 400.0, angle.sin() * 200.0 + 300.0);
-            positions.insert(index, position);
-            angle += angle_step;
-            index
-        });
-
-        let node2_index = *node_indices.entry(node2.clone()).or_insert_with(|| {
-            let index = graph.add_node(node2);
-            let position = Pos2::new(angle.cos() * 200.0 + 400.0, angle.sin() * 200.0 + 300.0);
-            positions.insert(index, position);
-            angle += angle_step;
-            index
-        });
-
-        graph.add_edge(node1_index, node2_index, ());
+        let node1_index = node_indices[&node1];
+        let node2_index = node_indices[&node2];
+        // Only add edge if it doesn't already exist
+        if !graph.contains_edge(node1_index, node2_index) {
+            graph.add_edge(node1_index, node2_index, ());
+        }
     }
 }
 
@@ -340,11 +355,12 @@ fn main() -> Result<(), eframe::Error> {
         if input == "stdin" {
             let stdin = io::stdin();
             let reader = stdin.lock();
-            for line in reader.lines() {
-                if let Ok(line) = line {
-                    parse_input(&graph_ref, &positions_ref, &line);
-                }
-            }
+            let content = reader
+                .lines()
+                .filter_map(Result::ok)
+                .collect::<Vec<String>>()
+                .join("\n");
+            parse_input(&graph_ref, &positions_ref, &content);
         } else {
             if !Path::new(&input).exists() {
                 panic!("File does not exist");
