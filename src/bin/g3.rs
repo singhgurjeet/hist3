@@ -518,27 +518,34 @@ impl GraphVisualizerApp {
             return;
         }
 
+        let is_selection = !self.selection_state.selected_nodes.is_empty();
+        let nodes_to_fit: Box<dyn Iterator<Item = &NodeIndex>> = if is_selection {
+            Box::new(self.selection_state.selected_nodes.iter())
+        } else {
+            Box::new(positions.keys())
+        };
+
         // Calculate bounds
         let mut min_x = f32::MAX;
         let mut min_y = f32::MAX;
         let mut max_x = f32::MIN;
         let mut max_y = f32::MIN;
 
-        for &pos in positions.values() {
-            min_x = min_x.min(pos.x);
-            min_y = min_y.min(pos.y);
-            max_x = max_x.max(pos.x);
-            max_y = max_y.max(pos.y);
+        for node_idx in nodes_to_fit {
+            if let Some(&pos) = positions.get(node_idx) {
+                min_x = min_x.min(pos.x);
+                min_y = min_y.min(pos.y);
+                max_x = max_x.max(pos.x);
+                max_y = max_y.max(pos.y);
+            }
         }
 
-        // Ensure we have valid dimensions
         if min_x.is_infinite() || min_y.is_infinite() || max_x.is_infinite() || max_y.is_infinite()
         {
             println!("Invalid bounds detected");
             return;
         }
 
-        // Add percentage-based padding
         let width = max_x - min_x;
         let height = max_y - min_y;
 
@@ -547,27 +554,24 @@ impl GraphVisualizerApp {
             return;
         }
 
-        let padding_percent = 0.1; // 10% padding
+        // Use more padding for selections
+        let padding_percent = if is_selection { 0.5 } else { 0.1 }; // 50% padding for selection, 10% for full graph
         let padded_width = width * (1.0 + 2.0 * padding_percent);
         let padded_height = height * (1.0 + 2.0 * padding_percent);
 
-        // Calculate the required zoom level
         let zoom_x = available_size.x / padded_width;
         let zoom_y = available_size.y / padded_height;
 
-        // Use the smaller zoom factor and ensure it's within tighter bounds
-        let new_zoom = zoom_x.min(zoom_y).clamp(0.5, 5.0); // Increased minimum zoom
+        let new_zoom = zoom_x.min(zoom_y).clamp(0.5, 5.0);
 
         if new_zoom.is_finite() && new_zoom > 0.0 {
             self.zoom_level = new_zoom;
 
-            // Calculate the center points
             let graph_center_x = (min_x + max_x) / 2.0;
             let graph_center_y = (min_y + max_y) / 2.0;
             let screen_center_x = available_size.x / 2.0;
             let screen_center_y = available_size.y / 2.0;
 
-            // Update pan offset to center the graph
             self.pan_offset = Vec2::new(
                 screen_center_x - (graph_center_x * self.zoom_level),
                 screen_center_y - (graph_center_y * self.zoom_level),
