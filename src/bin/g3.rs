@@ -220,7 +220,7 @@ impl eframe::App for GraphVisualizerApp {
                             self.selection_state.selected_nodes.clear();
                         }
                     }
-                } else if response.drag_released() {
+                } else if response.drag_stopped() {
                     // Finalize selection
                     if !modifiers.ctrl && !modifiers.shift {
                         self.selection_state.selected_nodes.clear();
@@ -271,7 +271,7 @@ impl eframe::App for GraphVisualizerApp {
 
                         self.print_selected_nodes();
                     }
-                } else if response.drag_released() {
+                } else if response.drag_stopped() {
                     if let (Some(start), Some(end)) = (
                         self.selection_state.drag_start,
                         self.selection_state.drag_end,
@@ -447,7 +447,7 @@ impl GraphVisualizerApp {
         }
     }
 
-    fn update_preview_selection(&mut self, modifiers: egui::Modifiers) {
+    fn update_preview_selection(&mut self, _modifiers: egui::Modifiers) {
         if let (Some(start), Some(end)) = (
             self.selection_state.drag_start,
             self.selection_state.drag_end,
