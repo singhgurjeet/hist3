@@ -33,6 +33,7 @@ struct GraphVisualizerApp {
     is_dragging: Option<NodeIndex>,
     running_simulation: bool,
     components: Vec<Vec<NodeIndex>>, // Store connected components
+    initialized: bool,               // Add this field to track initialization
 }
 
 impl Default for GraphVisualizerApp {
@@ -44,12 +45,24 @@ impl Default for GraphVisualizerApp {
             is_dragging: None,
             running_simulation: true,
             components: Vec::new(),
+            initialized: false,
         }
     }
 }
 
 impl eframe::App for GraphVisualizerApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Check if we need to initialize the layout
+        if !self.initialized {
+            let graph = self.graph_data.lock().unwrap();
+            if !graph.node_indices().next().is_none() {
+                // Check if graph has nodes
+                drop(graph); // Release the lock before calling reset_layout
+                self.reset_layout();
+                self.initialized = true;
+            }
+        }
+
         if self.running_simulation {
             self.update_layout();
             ctx.request_repaint();
