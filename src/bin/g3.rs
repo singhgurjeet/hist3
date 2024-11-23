@@ -2,6 +2,7 @@ use atty::Stream;
 use clap::Parser;
 use eframe::egui;
 use egui::{Color32, Pos2, Stroke, Vec2};
+use petgraph::algo::kosaraju_scc;
 use petgraph::graph::{Graph, NodeIndex};
 use petgraph::Undirected;
 use std::collections::{HashMap, HashSet};
@@ -16,6 +17,7 @@ const REPULSION_K: f32 = 50000.0; // Increased repulsion significantly
 const DAMPING: f32 = 0.7; // Increased damping to prevent oscillation
 const MAX_VELOCITY: f32 = 20.0; // Increased max velocity
 const MIN_MOVEMENT: f32 = 0.5; // Increased minimum movement threshold
+const COMPONENT_SPACING: f32 = 400.0; // Minimum spacing between components
 
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about)]
@@ -30,6 +32,7 @@ struct GraphVisualizerApp {
     velocities: HashMap<NodeIndex, Vec2>,
     is_dragging: Option<NodeIndex>,
     running_simulation: bool,
+    components: Vec<Vec<NodeIndex>>, // Store connected components
 }
 
 impl Default for GraphVisualizerApp {
@@ -40,6 +43,7 @@ impl Default for GraphVisualizerApp {
             velocities: HashMap::new(),
             is_dragging: None,
             running_simulation: true,
+            components: Vec::new(),
         }
     }
 }
@@ -138,28 +142,41 @@ impl eframe::App for GraphVisualizerApp {
 }
 
 impl GraphVisualizerApp {
-    fn reset_layout(&mut self) {
-        let mut positions = self.positions.lock().unwrap();
+    fn find_components(&mut self) {
         let graph = self.graph_data.lock().unwrap();
-        let node_count = graph.node_count();
+        // Use kosaraju_scc which returns Vec<Vec<NodeIndex>>
+        self.components = kosaraju_scc(&*graph);
+    }
 
-        // Place nodes in a larger circle
-        for (i, node_idx) in graph.node_indices().enumerate() {
-            let angle = 2.0 * std::f32::consts::PI * (i as f32) / (node_count as f32);
-            let radius = 350.0; // Increased initial radius
-            let center_x = 400.0;
-            let center_y = 300.0;
-            let x = radius * angle.cos() + center_x;
-            let y = radius * angle.sin() + center_y;
-            positions.insert(node_idx, Pos2::new(x, y));
-        }
+    fn reset_layout(&mut self) {
+        self.find_components();
+        let mut positions = self.positions.lock().unwrap();
 
-        // Add some random initial velocity to break symmetry
-        self.velocities.clear();
-        for node_idx in graph.node_indices() {
-            let random_angle = (node_idx.index() as f32) * 0.1;
-            let random_velocity = Vec2::new(random_angle.cos(), random_angle.sin()) * 2.0;
-            self.velocities.insert(node_idx, random_velocity);
+        // Calculate grid layout for components
+        let components_per_row = (self.components.len() as f32).sqrt().ceil() as usize;
+
+        for (comp_idx, component) in self.components.iter().enumerate() {
+            let row = comp_idx / components_per_row;
+            let col = comp_idx % components_per_row;
+
+            // Calculate component center position
+            let center_x = col as f32 * COMPONENT_SPACING + COMPONENT_SPACING / 2.0;
+            let center_y = row as f32 * COMPONENT_SPACING + COMPONENT_SPACING / 2.0;
+
+            // Place nodes in a circle within their component
+            let node_count = component.len();
+            for (i, &node_idx) in component.iter().enumerate() {
+                let angle = 2.0 * std::f32::consts::PI * (i as f32) / (node_count as f32);
+                let radius = 150.0; // Radius for each component's circle
+                let x = radius * angle.cos() + center_x;
+                let y = radius * angle.sin() + center_y;
+                positions.insert(node_idx, Pos2::new(x, y));
+
+                // Add random initial velocity
+                let random_angle = (node_idx.index() as f32) * 0.1;
+                let random_velocity = Vec2::new(random_angle.cos(), random_angle.sin()) * 2.0;
+                self.velocities.insert(node_idx, random_velocity);
+            }
         }
 
         self.running_simulation = true;
@@ -169,109 +186,119 @@ impl GraphVisualizerApp {
         let graph = self.graph_data.lock().unwrap();
         let mut positions = self.positions.lock().unwrap();
         let mut forces: HashMap<NodeIndex, Vec2> = HashMap::new();
-        let center = Vec2::new(400.0, 300.0);
 
-        // Initialize forces with a small random component to break symmetry
-        for node_idx in graph.node_indices() {
-            let random_angle = (node_idx.index() as f32) * std::f32::consts::PI * 0.1;
-            let random_force = Vec2::new(random_angle.cos(), random_angle.sin()) * 0.1;
-            forces.insert(node_idx, random_force);
-        }
+        // Update forces for each component separately
+        for component in &self.components {
+            let component_center = self.calculate_component_center(component, &positions);
 
-        // Calculate repulsive forces between all nodes
-        for node1 in graph.node_indices() {
-            if self.is_dragging == Some(node1) {
-                continue;
+            // Initialize forces for this component
+            for &node_idx in component {
+                let random_angle = (node_idx.index() as f32) * std::f32::consts::PI * 0.1;
+                let random_force = Vec2::new(random_angle.cos(), random_angle.sin()) * 0.1;
+                forces.insert(node_idx, random_force);
             }
 
-            let mut total_force = Vec2::ZERO;
-
-            // Repulsive forces from other nodes
-            for node2 in graph.node_indices() {
-                if node1 == node2 {
+            // Calculate forces within component
+            for &node1 in component {
+                if self.is_dragging == Some(node1) {
                     continue;
                 }
 
-                if let (Some(&pos1), Some(&pos2)) = (positions.get(&node1), positions.get(&node2)) {
-                    let delta = pos1 - pos2;
-                    let distance = delta.length().max(1.0);
+                let mut total_force = Vec2::ZERO;
 
-                    // Stronger repulsion at close distances
-                    let repulsion_strength = if distance < SPRING_LENGTH {
-                        REPULSION_K * 2.0
-                    } else {
-                        REPULSION_K
-                    };
+                // Repulsive forces from other nodes in the same component
+                for &node2 in component {
+                    if node1 == node2 {
+                        continue;
+                    }
 
-                    let force = delta.normalized() * (repulsion_strength / distance.powi(2));
-                    total_force += force;
+                    if let (Some(&pos1), Some(&pos2)) =
+                        (positions.get(&node1), positions.get(&node2))
+                    {
+                        let delta = pos1 - pos2;
+                        let distance = delta.length().max(1.0);
+
+                        let repulsion_strength = if distance < SPRING_LENGTH {
+                            REPULSION_K * 2.0
+                        } else {
+                            REPULSION_K
+                        };
+
+                        let force = delta.normalized() * (repulsion_strength / distance.powi(2));
+                        total_force += force;
+                    }
                 }
+
+                // Add centering force towards component center
+                if let Some(&pos) = positions.get(&node1) {
+                    let to_center = component_center - Vec2::new(pos.x, pos.y);
+                    let center_distance = to_center.length();
+                    let center_force = to_center * (0.05 * (center_distance / 300.0).powi(2));
+                    total_force += center_force;
+                }
+
+                *forces.get_mut(&node1).unwrap() += total_force;
             }
 
-            // Add centering force
-            if let Some(&pos) = positions.get(&node1) {
-                let to_center = center - Vec2::new(pos.x, pos.y);
-                let center_distance = to_center.length();
-                let center_force = to_center * (0.05 * (center_distance / 300.0).powi(2));
-                total_force += center_force;
-            }
+            // Calculate attractive forces along edges within component
+            for &node1 in component {
+                for neighbor in graph.neighbors(node1) {
+                    if component.contains(&neighbor) {
+                        if let (Some(&pos1), Some(&pos2)) =
+                            (positions.get(&node1), positions.get(&neighbor))
+                        {
+                            let delta = pos1 - pos2;
+                            let distance = delta.length().max(1.0);
 
-            *forces.get_mut(&node1).unwrap() += total_force;
-        }
+                            let spring_k = if distance > SPRING_LENGTH * 2.0 {
+                                SPRING_K * 2.0
+                            } else {
+                                SPRING_K
+                            };
 
-        // Calculate attractive forces along edges
-        for edge in graph.edge_indices() {
-            let (node1, node2) = graph.edge_endpoints(edge).unwrap();
-            if let (Some(&pos1), Some(&pos2)) = (positions.get(&node1), positions.get(&node2)) {
-                let delta = pos1 - pos2;
-                let distance = delta.length().max(1.0);
+                            let force = delta.normalized() * (distance - SPRING_LENGTH) * -spring_k;
 
-                // Stronger attraction for distant nodes
-                let spring_k = if distance > SPRING_LENGTH * 2.0 {
-                    SPRING_K * 2.0
-                } else {
-                    SPRING_K
-                };
-
-                let force = delta.normalized() * (distance - SPRING_LENGTH) * -spring_k;
-
-                if self.is_dragging != Some(node1) {
-                    *forces.get_mut(&node1).unwrap() += force;
-                }
-                if self.is_dragging != Some(node2) {
-                    *forces.get_mut(&node2).unwrap() -= force;
+                            if self.is_dragging != Some(node1) {
+                                *forces.get_mut(&node1).unwrap() += force;
+                            }
+                        }
+                    }
                 }
             }
         }
 
         // Update velocities and positions
         let mut max_movement = 0.0_f32;
-        for node_idx in graph.node_indices() {
-            if self.is_dragging == Some(node_idx) {
-                continue;
-            }
+        for component in &self.components {
+            for &node_idx in component {
+                if self.is_dragging == Some(node_idx) {
+                    continue;
+                }
 
-            let velocity = self.velocities.entry(node_idx).or_insert(Vec2::ZERO);
-            let force = forces[&node_idx];
+                let velocity = self.velocities.entry(node_idx).or_insert(Vec2::ZERO);
+                let force = forces[&node_idx];
 
-            // Update velocity with damping
-            *velocity = (*velocity + force) * DAMPING;
+                // Update velocity with damping
+                *velocity = (*velocity + force) * DAMPING;
 
-            // Limit velocity
-            if velocity.length() > MAX_VELOCITY {
-                *velocity = velocity.normalized() * MAX_VELOCITY;
-            }
+                // Limit velocity
+                if velocity.length() > MAX_VELOCITY {
+                    *velocity = velocity.normalized() * MAX_VELOCITY;
+                }
 
-            // Update position
-            if let Some(pos) = positions.get_mut(&node_idx) {
-                let old_pos = *pos;
-                *pos = old_pos + *velocity;
+                // Update position
+                if let Some(pos) = positions.get_mut(&node_idx) {
+                    let old_pos = *pos;
+                    *pos = old_pos + *velocity;
 
-                // Keep nodes within bounds with more padding
-                pos.x = pos.x.clamp(150.0, 650.0);
-                pos.y = pos.y.clamp(150.0, 450.0);
+                    // Keep nodes within reasonable bounds
+                    let max_x = COMPONENT_SPACING * (self.components.len() as f32);
+                    let max_y = COMPONENT_SPACING * (self.components.len() as f32);
+                    pos.x = pos.x.clamp(100.0, max_x);
+                    pos.y = pos.y.clamp(100.0, max_y);
 
-                max_movement = max_movement.max((*velocity).length());
+                    max_movement = max_movement.max((*velocity).length());
+                }
             }
         }
 
@@ -280,8 +307,29 @@ impl GraphVisualizerApp {
             self.running_simulation = false;
         }
     }
-}
 
+    fn calculate_component_center(
+        &self,
+        component: &[NodeIndex],
+        positions: &HashMap<NodeIndex, Pos2>,
+    ) -> Vec2 {
+        let mut center = Vec2::ZERO;
+        let mut count = 0;
+
+        for &node_idx in component {
+            if let Some(&pos) = positions.get(&node_idx) {
+                center += Vec2::new(pos.x, pos.y);
+                count += 1;
+            }
+        }
+
+        if count > 0 {
+            center /= count as f32;
+        }
+
+        center
+    }
+}
 fn parse_input(
     graph_ref: &Arc<Mutex<Graph<String, (), Undirected>>>,
     positions_ref: &Arc<Mutex<HashMap<NodeIndex, Pos2>>>,
