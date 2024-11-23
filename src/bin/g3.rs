@@ -358,12 +358,29 @@ impl eframe::App for GraphVisualizerApp {
                     if let Some(pos) = pointer_pos {
                         if let Some(node_idx) = self.is_dragging {
                             let mut positions = self.positions.lock().unwrap();
-                            positions.insert(node_idx, pos);
-                            self.velocities.insert(node_idx, Vec2::ZERO);
+
+                            // If dragging a selected node, move all selected nodes
+                            if self.selection_state.selected_nodes.contains(&node_idx) {
+                                // Calculate the movement delta
+                                let old_pos = positions[&node_idx];
+                                let delta = pos - old_pos;
+
+                                // Move all selected nodes by the same delta
+                                for &selected_idx in &self.selection_state.selected_nodes {
+                                    if let Some(selected_pos) = positions.get_mut(&selected_idx) {
+                                        *selected_pos = *selected_pos + delta;
+                                    }
+                                    self.velocities.insert(selected_idx, Vec2::ZERO);
+                                }
+                            } else {
+                                // If dragging an unselected node, move just that node
+                                positions.insert(node_idx, pos);
+                                self.velocities.insert(node_idx, Vec2::ZERO);
+                            }
                         } else {
                             let positions = self.positions.lock().unwrap();
                             for (idx, &node_pos) in positions.iter() {
-                                if node_pos.distance(pos) < (NODE_RADIUS * 1.2) / self.zoom_level {
+                                if node_pos.distance(pos) < NODE_RADIUS / self.zoom_level {
                                     self.is_dragging = Some(*idx);
                                     break;
                                 }
@@ -402,10 +419,14 @@ impl eframe::App for GraphVisualizerApp {
                     {
                         let screen_src = self.graph_to_screen_pos(src_pos);
                         let screen_tgt = self.graph_to_screen_pos(tgt_pos);
-                        painter.line_segment(
-                            [screen_src, screen_tgt],
-                            Stroke::new(2.0 * self.zoom_level, EDGE),
-                        );
+
+                        // Base thickness that increases as we zoom out
+                        let base_thickness = 1.5 / self.zoom_level.powf(0.7);
+                        // Clamp to reasonable limits
+                        let thickness = base_thickness.clamp(0.5, 1.5);
+
+                        painter
+                            .line_segment([screen_src, screen_tgt], Stroke::new(thickness, EDGE));
                     }
                 }
 
