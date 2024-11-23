@@ -11,13 +11,13 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::{fs::File, thread};
 
-const SPRING_LENGTH: f32 = 200.0; // Increased even more for better spacing
-const SPRING_K: f32 = 0.05; // Reduced spring force for more stability
-const REPULSION_K: f32 = 50000.0; // Increased repulsion significantly
-const DAMPING: f32 = 0.7; // Increased damping to prevent oscillation
-const MAX_VELOCITY: f32 = 20.0; // Increased max velocity
-const MIN_MOVEMENT: f32 = 0.5; // Increased minimum movement threshold
-const COMPONENT_SPACING: f32 = 400.0; // Minimum spacing between components
+const SPRING_LENGTH: f32 = 12.5; // Increase for more spacing
+const SPRING_K: f32 = 0.05; // Reduced for more stability
+const REPULSION_K: f32 = 100_000.0; // Increase to encourage planarity
+const DAMPING: f32 = 0.7; // Increase to prevent oscillation
+const MAX_VELOCITY: f32 = 20.0;
+const MIN_MOVEMENT: f32 = 10.0; // Movement threshold to prevent nodes from jiggling
+const COMPONENT_SPACING: f32 = 500.0; // Minimum spacing between components
 
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about)]
@@ -62,6 +62,7 @@ struct GraphVisualizerApp {
     pan_offset: Vec2,
     interaction_mode: InteractionMode,
     selection_state: SelectionState,
+    initial_layout_complete: bool,
 }
 
 impl Default for GraphVisualizerApp {
@@ -78,6 +79,7 @@ impl Default for GraphVisualizerApp {
             pan_offset: Vec2::ZERO,
             interaction_mode: InteractionMode::Pan,
             selection_state: SelectionState::default(),
+            initial_layout_complete: false,
         }
     }
 }
@@ -111,6 +113,11 @@ impl eframe::App for GraphVisualizerApp {
 
         if self.running_simulation {
             self.update_layout();
+            if !self.running_simulation && !self.initial_layout_complete {
+                // Only fit on first settle
+                self.fit_to_view(window_size);
+                self.initial_layout_complete = true;
+            }
             ctx.request_repaint();
         }
 
@@ -719,13 +726,13 @@ impl GraphVisualizerApp {
                 }
 
                 let velocity = self.velocities.entry(node_idx).or_insert(Vec2::ZERO);
-                let force = forces[&node_idx];
 
-                // Update velocity with damping
-                *velocity = (*velocity + force) * DAMPING;
-
-                // Subtract average component velocity to prevent drift
+                // First subtract average component velocity to prevent drift
                 *velocity -= avg_velocity;
+
+                // Then apply new forces and damping
+                let force = forces[&node_idx];
+                *velocity = (*velocity + force) * DAMPING;
 
                 // Limit velocity
                 if velocity.length() > MAX_VELOCITY {
@@ -836,8 +843,6 @@ fn parse_input(
         }
     }
 }
-
-// Remove parse_edge function as it's no longer needed
 
 fn main() -> Result<(), eframe::Error> {
     let args = Args::parse();
