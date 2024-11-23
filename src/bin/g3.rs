@@ -104,7 +104,7 @@ impl eframe::App for GraphVisualizerApp {
             let graph = self.graph_data.lock().unwrap();
             if !graph.node_indices().next().is_none() {
                 drop(graph);
-                self.reset_layout();
+                self.reset_layout(ctx.available_rect().size());
                 self.initialized = true;
             }
         }
@@ -127,7 +127,7 @@ impl eframe::App for GraphVisualizerApp {
                     self.running_simulation = !self.running_simulation;
                 }
                 if ui.button("🔄 Reset Layout").clicked() {
-                    self.reset_layout();
+                    self.reset_layout(ctx.available_rect().size());
                 }
                 if ui.button("🔍 Fit to View").clicked() {
                     self.fit_to_view(window_size);
@@ -569,38 +569,42 @@ impl GraphVisualizerApp {
         self.components = kosaraju_scc(&*graph);
     }
 
-    fn reset_layout(&mut self) {
+    fn reset_layout(&mut self, window_size: Vec2) {
         self.find_components();
-        let mut positions = self.positions.lock().unwrap();
 
         // Calculate grid layout for components
         let components_per_row = (self.components.len() as f32).sqrt().ceil() as usize;
 
-        for (comp_idx, component) in self.components.iter().enumerate() {
-            let row = comp_idx / components_per_row;
-            let col = comp_idx % components_per_row;
+        {
+            let mut positions = self.positions.lock().unwrap();
 
-            // Calculate component center position
-            let center_x = col as f32 * COMPONENT_SPACING + COMPONENT_SPACING / 2.0;
-            let center_y = row as f32 * COMPONENT_SPACING + COMPONENT_SPACING / 2.0;
+            for (comp_idx, component) in self.components.iter().enumerate() {
+                let row = comp_idx / components_per_row;
+                let col = comp_idx % components_per_row;
 
-            // Place nodes in a circle within their component
-            let node_count = component.len();
-            for (i, &node_idx) in component.iter().enumerate() {
-                let angle = 2.0 * std::f32::consts::PI * (i as f32) / (node_count as f32);
-                let radius = 150.0; // Radius for each component's circle
-                let x = radius * angle.cos() + center_x;
-                let y = radius * angle.sin() + center_y;
-                positions.insert(node_idx, Pos2::new(x, y));
+                // Calculate component center position
+                let center_x = col as f32 * COMPONENT_SPACING + COMPONENT_SPACING / 2.0;
+                let center_y = row as f32 * COMPONENT_SPACING + COMPONENT_SPACING / 2.0;
 
-                // Add random initial velocity
-                let random_angle = (node_idx.index() as f32) * 0.1;
-                let random_velocity = Vec2::new(random_angle.cos(), random_angle.sin()) * 2.0;
-                self.velocities.insert(node_idx, random_velocity);
+                // Place nodes in a circle within their component
+                let node_count = component.len();
+                for (i, &node_idx) in component.iter().enumerate() {
+                    let angle = 2.0 * std::f32::consts::PI * (i as f32) / (node_count as f32);
+                    let radius = 150.0; // Radius for each component's circle
+                    let x = radius * angle.cos() + center_x;
+                    let y = radius * angle.sin() + center_y;
+                    positions.insert(node_idx, Pos2::new(x, y));
+
+                    // Add random initial velocity
+                    let random_angle = (node_idx.index() as f32) * 0.1;
+                    let random_velocity = Vec2::new(random_angle.cos(), random_angle.sin()) * 2.0;
+                    self.velocities.insert(node_idx, random_velocity);
+                }
             }
         }
 
         self.running_simulation = true;
+        self.fit_to_view(window_size);
     }
 
     fn update_layout(&mut self) {

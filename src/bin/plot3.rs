@@ -151,8 +151,7 @@ impl eframe::App for PlotApp {
                             ui.horizontal(|ui| {
                                 ui.checkbox(&mut self.cums[i], "Cumulative");
                                 ui.add(
-                                    egui::DragValue::new(&mut self.box_width[i])
-                                        .range(1..=50000),
+                                    egui::DragValue::new(&mut self.box_width[i]).range(1..=50000),
                                 );
                                 ui.label("Averaging");
                                 ui.checkbox(&mut self.zscore[i], "Z-Score");
@@ -212,10 +211,7 @@ fn make_series(
     //     .max_by(|a, b| a.total_cmp(b))
     //     .unwrap();
     // let range = max - min;
-    let vv = data
-        .iter()
-        .map(|v| v[series_idx])
-        .collect::<Vec<_>>();
+    let vv = data.iter().map(|v| v[series_idx]).collect::<Vec<_>>();
     let (mean, std) = mean_std(&vv);
     data.iter()
         .enumerate()
