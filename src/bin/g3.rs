@@ -156,7 +156,6 @@ impl eframe::App for GraphVisualizerApp {
                 }
 
                 ui.label(format!("Zoom: {:.1}x", self.zoom_level));
-                // TODO: REMOVE THIS, only for debugging
                 let graph = self.graph_data.lock().unwrap();
                 let names: Vec<String> = self
                     .selection_state
@@ -164,6 +163,9 @@ impl eframe::App for GraphVisualizerApp {
                     .iter()
                     .filter_map(|&idx| graph.node_weight(idx).cloned())
                     .collect();
+                if !names.is_empty() {
+                    ctx.output_mut(|o| o.copied_text = names.join("\t"));
+                }
                 ui.label(format!("Selected: {}", names.join(", ")));
             });
         });
@@ -275,8 +277,6 @@ impl eframe::App for GraphVisualizerApp {
                         if !found_node && !modifiers.ctrl && !modifiers.shift {
                             self.selection_state.selected_nodes.clear();
                         }
-
-                        self.print_selected_nodes();
                     }
                 } else if response.drag_stopped() {
                     if let (Some(start), Some(end)) = (
@@ -304,8 +304,6 @@ impl eframe::App for GraphVisualizerApp {
 
                     self.selection_state.drag_start = None;
                     self.selection_state.drag_end = None;
-
-                    self.print_selected_nodes();
                 }
             } else {
                 // Pan mode dragging logic
@@ -434,26 +432,6 @@ impl eframe::App for GraphVisualizerApp {
     }
 }
 impl GraphVisualizerApp {
-    fn print_selected_nodes(&self) {
-        let graph = self.graph_data.lock().unwrap();
-
-        // Get names and sort them for consistent output
-        let mut names: Vec<String> = self
-            .selection_state
-            .selected_nodes
-            .iter()
-            .filter_map(|&idx| graph.node_weight(idx))
-            .cloned()
-            .collect();
-        names.sort();
-
-        // Print tab-separated names if there are any selected nodes
-        if !names.is_empty() {
-            let output = names.join("\t");
-            // ctx.output_mut(|o| o.copied_text = output);
-        }
-    }
-
     fn update_preview_selection(&mut self, _modifiers: egui::Modifiers) {
         if let (Some(start), Some(end)) = (
             self.selection_state.drag_start,
