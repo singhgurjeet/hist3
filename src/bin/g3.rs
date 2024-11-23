@@ -34,6 +34,7 @@ enum InteractionMode {
 
 struct SelectionState {
     selected_nodes: HashSet<NodeIndex>,
+    preview_nodes: HashSet<NodeIndex>, // New: tracks nodes currently in selection rectangle
     drag_start: Option<Pos2>,
     drag_end: Option<Pos2>,
 }
@@ -42,6 +43,7 @@ impl Default for SelectionState {
     fn default() -> Self {
         Self {
             selected_nodes: HashSet::new(),
+            preview_nodes: HashSet::new(),
             drag_start: None,
             drag_end: None,
         }
@@ -178,7 +180,59 @@ impl eframe::App for GraphVisualizerApp {
                             self.selection_state.drag_start = Some(pos);
                         }
                         self.selection_state.drag_end = Some(pos);
+
+                        // Update preview selection in real-time
+                        self.update_preview_selection(modifiers);
                     }
+                } else if response.clicked() {
+                    if let Some(pos) = pointer_pos {
+                        let positions = self.positions.lock().unwrap();
+                        let mut found_node = false;
+
+                        for (idx, &node_pos) in positions.iter() {
+                            if node_pos.distance(pos) < 15.0 {
+                                if modifiers.ctrl {
+                                    // Toggle single node
+                                    if !self.selection_state.selected_nodes.remove(idx) {
+                                        self.selection_state.selected_nodes.insert(*idx);
+                                    }
+                                } else if modifiers.shift {
+                                    // Add to selection
+                                    self.selection_state.selected_nodes.insert(*idx);
+                                } else {
+                                    // New selection
+                                    self.selection_state.selected_nodes.clear();
+                                    self.selection_state.selected_nodes.insert(*idx);
+                                }
+                                found_node = true;
+                                break;
+                            }
+                        }
+
+                        if !found_node && !modifiers.ctrl && !modifiers.shift {
+                            self.selection_state.selected_nodes.clear();
+                        }
+                    }
+                } else if response.drag_released() {
+                    // Finalize selection
+                    if !modifiers.ctrl && !modifiers.shift {
+                        self.selection_state.selected_nodes.clear();
+                    }
+
+                    for node_idx in &self.selection_state.preview_nodes {
+                        if modifiers.ctrl {
+                            if !self.selection_state.selected_nodes.remove(node_idx) {
+                                self.selection_state.selected_nodes.insert(*node_idx);
+                            }
+                        } else {
+                            self.selection_state.selected_nodes.insert(*node_idx);
+                        }
+                    }
+
+                    // Clear preview state
+                    self.selection_state.preview_nodes.clear();
+                    self.selection_state.drag_start = None;
+                    self.selection_state.drag_end = None;
                 } else if response.clicked() {
                     if let Some(pos) = pointer_pos {
                         let positions = self.positions.lock().unwrap();
@@ -300,10 +354,12 @@ impl eframe::App for GraphVisualizerApp {
                             let node_radius = 12.0 * self.zoom_level;
                             let stroke_width = 2.0 * self.zoom_level;
 
-                            // Change node color based on selection
+                            // Determine node color based on selection and preview state
                             let node_color =
                                 if self.selection_state.selected_nodes.contains(&node_idx) {
                                     Color32::from_rgb(0, 255, 0) // Green for selected nodes
+                                } else if self.selection_state.preview_nodes.contains(&node_idx) {
+                                    Color32::from_rgb(0, 200, 100) // Light green for preview selection
                                 } else {
                                     Color32::from_rgb(0, 100, 255) // Original blue for unselected nodes
                                 };
@@ -360,6 +416,27 @@ impl eframe::App for GraphVisualizerApp {
     }
 }
 impl GraphVisualizerApp {
+    fn update_preview_selection(&mut self, modifiers: egui::Modifiers) {
+        if let (Some(start), Some(end)) = (
+            self.selection_state.drag_start,
+            self.selection_state.drag_end,
+        ) {
+            let selection_rect = Rect::from_two_pos(start, end);
+            let positions = self.positions.lock().unwrap();
+
+            // Clear previous preview
+            self.selection_state.preview_nodes.clear();
+
+            // Update preview selection based on current drag rectangle
+            for (idx, &pos) in positions.iter() {
+                let screen_pos = self.graph_to_screen_pos(pos);
+                if selection_rect.contains(screen_pos) {
+                    self.selection_state.preview_nodes.insert(*idx);
+                }
+            }
+        }
+    }
+
     fn handle_zoom(&mut self, scroll_delta: f32, center_pos: Pos2) {
         let zoom_factor = if scroll_delta > 0.0 { 1.1 } else { 0.9 };
         let old_zoom = self.zoom_level;
