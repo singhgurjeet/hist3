@@ -60,7 +60,6 @@ struct GraphVisualizerApp {
     initialized: bool,
     zoom_level: f32,
     pan_offset: Vec2,
-    viewport_bounds: Option<(Pos2, Pos2)>,
     interaction_mode: InteractionMode,
     selection_state: SelectionState,
 }
@@ -77,7 +76,6 @@ impl Default for GraphVisualizerApp {
             initialized: false,
             zoom_level: 1.0,
             pan_offset: Vec2::ZERO,
-            viewport_bounds: None,
             interaction_mode: InteractionMode::Pan,
             selection_state: SelectionState::default(),
         }
@@ -151,6 +149,15 @@ impl eframe::App for GraphVisualizerApp {
                 }
 
                 ui.label(format!("Zoom: {:.1}x", self.zoom_level));
+                // TODO: REMOVE THIS, only for debugging
+                let graph = self.graph_data.lock().unwrap();
+                let names: Vec<String> = self
+                    .selection_state
+                    .selected_nodes
+                    .iter()
+                    .filter_map(|&idx| graph.node_weight(idx).cloned())
+                    .collect();
+                ui.label(format!("Selected: {}", names.join(", ")));
             });
         });
 
@@ -261,6 +268,8 @@ impl eframe::App for GraphVisualizerApp {
                         if !found_node && !modifiers.ctrl && !modifiers.shift {
                             self.selection_state.selected_nodes.clear();
                         }
+
+                        self.print_selected_nodes();
                     }
                 } else if response.drag_released() {
                     if let (Some(start), Some(end)) = (
@@ -288,6 +297,8 @@ impl eframe::App for GraphVisualizerApp {
 
                     self.selection_state.drag_start = None;
                     self.selection_state.drag_end = None;
+
+                    self.print_selected_nodes();
                 }
             } else {
                 // Pan mode dragging logic
@@ -416,6 +427,26 @@ impl eframe::App for GraphVisualizerApp {
     }
 }
 impl GraphVisualizerApp {
+    fn print_selected_nodes(&self) {
+        let graph = self.graph_data.lock().unwrap();
+
+        // Get names and sort them for consistent output
+        let mut names: Vec<String> = self
+            .selection_state
+            .selected_nodes
+            .iter()
+            .filter_map(|&idx| graph.node_weight(idx))
+            .cloned()
+            .collect();
+        names.sort();
+
+        // Print tab-separated names if there are any selected nodes
+        if !names.is_empty() {
+            let output = names.join("\t");
+            // ctx.output_mut(|o| o.copied_text = output);
+        }
+    }
+
     fn update_preview_selection(&mut self, modifiers: egui::Modifiers) {
         if let (Some(start), Some(end)) = (
             self.selection_state.drag_start,
@@ -751,10 +782,22 @@ fn parse_input(
     let mut edges = Vec::new();
 
     for line in input.lines() {
-        let (node1, node2) = parse_edge(line);
-        unique_nodes.insert(node1.clone());
-        unique_nodes.insert(node2.clone());
-        edges.push((node1, node2));
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        match parts.len() {
+            0 => continue, // Skip empty lines
+            1 => {
+                // Single node
+                unique_nodes.insert(parts[0].to_string());
+            }
+            _ => {
+                // Edge (take first two parts even if there are more)
+                let node1 = parts[0].to_string();
+                let node2 = parts[1].to_string();
+                unique_nodes.insert(node1.clone());
+                unique_nodes.insert(node2.clone());
+                edges.push((node1, node2));
+            }
+        }
     }
 
     let mut graph = graph_ref.lock().unwrap();
@@ -790,12 +833,7 @@ fn parse_input(
     }
 }
 
-fn parse_edge(line: &str) -> (String, String) {
-    let mut nodes = line.split_whitespace();
-    let node1 = nodes.next().unwrap_or_default().to_string();
-    let node2 = nodes.next().unwrap_or_default().to_string();
-    (node1, node2)
-}
+// Remove parse_edge function as it's no longer needed
 
 fn main() -> Result<(), eframe::Error> {
     let args = Args::parse();
