@@ -194,6 +194,24 @@ impl eframe::App for GraphVisualizerApp {
 }
 
 impl GraphVisualizerApp {
+    fn handle_zoom(&mut self, scroll_delta: f32, center_pos: Pos2) {
+        let zoom_factor = if scroll_delta > 0.0 { 1.1 } else { 0.9 };
+        let old_zoom = self.zoom_level;
+
+        // Update zoom level with tighter clamping
+        self.zoom_level = (self.zoom_level * zoom_factor).clamp(0.5, 5.0); // Increased minimum zoom
+
+        // If the zoom level didn't change (due to clamping), don't update the pan offset
+        if (self.zoom_level - old_zoom).abs() < f32::EPSILON {
+            return;
+        }
+
+        // Adjust pan offset to keep the point under the cursor stationary
+        let center_vec = Vec2::new(center_pos.x, center_pos.y);
+        self.pan_offset =
+            center_vec + (self.pan_offset - center_vec) * (self.zoom_level / old_zoom);
+    }
+
     fn fit_to_view(&mut self, available_size: Vec2) {
         let positions = self.positions.lock().unwrap();
         if positions.is_empty() {
@@ -216,6 +234,7 @@ impl GraphVisualizerApp {
         // Ensure we have valid dimensions
         if min_x.is_infinite() || min_y.is_infinite() || max_x.is_infinite() || max_y.is_infinite()
         {
+            println!("Invalid bounds detected");
             return;
         }
 
@@ -224,6 +243,7 @@ impl GraphVisualizerApp {
         let height = max_y - min_y;
 
         if width <= 0.0 || height <= 0.0 {
+            println!("Invalid dimensions: width={}, height={}", width, height);
             return;
         }
 
@@ -235,8 +255,8 @@ impl GraphVisualizerApp {
         let zoom_x = available_size.x / padded_width;
         let zoom_y = available_size.y / padded_height;
 
-        // Use the smaller zoom factor and ensure it's within bounds
-        let new_zoom = zoom_x.min(zoom_y).clamp(0.1, 5.0);
+        // Use the smaller zoom factor and ensure it's within tighter bounds
+        let new_zoom = zoom_x.min(zoom_y).clamp(0.5, 5.0); // Increased minimum zoom
 
         if new_zoom.is_finite() && new_zoom > 0.0 {
             self.zoom_level = new_zoom;
@@ -253,24 +273,6 @@ impl GraphVisualizerApp {
                 screen_center_y - (graph_center_y * self.zoom_level),
             );
         }
-    }
-
-    fn handle_zoom(&mut self, scroll_delta: f32, center_pos: Pos2) {
-        let zoom_factor = if scroll_delta > 0.0 { 1.1 } else { 0.9 };
-        let old_zoom = self.zoom_level;
-
-        // Update zoom level with clamping
-        self.zoom_level = (self.zoom_level * zoom_factor).clamp(0.1, 5.0);
-
-        // If the zoom level didn't change (due to clamping), don't update the pan offset
-        if (self.zoom_level - old_zoom).abs() < f32::EPSILON {
-            return;
-        }
-
-        // Adjust pan offset to keep the point under the cursor stationary
-        let center_vec = Vec2::new(center_pos.x, center_pos.y);
-        self.pan_offset =
-            center_vec + (self.pan_offset - center_vec) * (self.zoom_level / old_zoom);
     }
 
     fn graph_to_screen_pos(&self, pos: Pos2) -> Pos2 {
