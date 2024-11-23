@@ -370,7 +370,15 @@ impl eframe::App for GraphVisualizerApp {
                             let node_radius = 12.0 * self.zoom_level;
                             let stroke_width = 2.0 * self.zoom_level;
 
-                            // Determine node color based on selection and preview state
+                            // Check if this node is a neighbor of the dragged node
+                            let is_neighbor = self
+                                .is_dragging
+                                .map(|dragged_idx| {
+                                    graph.neighbors(dragged_idx).any(|n| n == node_idx)
+                                })
+                                .unwrap_or(false);
+
+                            // Determine node color
                             let node_color =
                                 if self.selection_state.selected_nodes.contains(&node_idx) {
                                     Color32::from_rgb(0, 255, 0) // Green for selected nodes
@@ -380,10 +388,17 @@ impl eframe::App for GraphVisualizerApp {
                                     Color32::from_rgb(0, 100, 255) // Original blue for unselected nodes
                                 };
 
+                            // Draw outer circle with highlight for neighbors
+                            let stroke_color = if is_neighbor {
+                                Color32::from_rgb(255, 165, 0) // Subtle light yellow
+                            } else {
+                                Color32::WHITE
+                            };
+
                             painter.circle_stroke(
                                 screen_pos,
                                 node_radius,
-                                Stroke::new(stroke_width, Color32::WHITE),
+                                Stroke::new(stroke_width, stroke_color),
                             );
                             painter.circle_filled(
                                 screen_pos,
