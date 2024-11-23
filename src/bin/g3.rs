@@ -113,6 +113,7 @@ struct GraphVisualizerApp {
     interaction_mode: InteractionMode,
     selection_state: SelectionState,
     initial_layout_complete: bool,
+    min_zoom_level: f32,
 }
 
 impl Default for GraphVisualizerApp {
@@ -130,6 +131,7 @@ impl Default for GraphVisualizerApp {
             interaction_mode: InteractionMode::Pan,
             selection_state: SelectionState::default(),
             initial_layout_complete: false,
+            min_zoom_level: 0.5,
         }
     }
 }
@@ -537,15 +539,13 @@ impl GraphVisualizerApp {
         let zoom_factor = if scroll_delta > 0.0 { 1.1 } else { 0.9 };
         let old_zoom = self.zoom_level;
 
-        // Update zoom level with tighter clamping
-        self.zoom_level = (self.zoom_level * zoom_factor).clamp(0.5, 5.0); // Increased minimum zoom
+        // Use the calculated min_zoom_level instead of a hard-coded value
+        self.zoom_level = (self.zoom_level * zoom_factor).clamp(self.min_zoom_level, 5.0);
 
-        // If the zoom level didn't change (due to clamping), don't update the pan offset
         if (self.zoom_level - old_zoom).abs() < f32::EPSILON {
             return;
         }
 
-        // Adjust pan offset to keep the point under the cursor stationary
         let center_vec = Vec2::new(center_pos.x, center_pos.y);
         self.pan_offset =
             center_vec + (self.pan_offset - center_vec) * (self.zoom_level / old_zoom);
@@ -579,43 +579,42 @@ impl GraphVisualizerApp {
             }
         }
 
-        if min_x.is_infinite() || min_y.is_infinite() || max_x.is_infinite() || max_y.is_infinite()
-        {
-            println!("Invalid bounds detected");
-            return;
-        }
-
         let width = max_x - min_x;
         let height = max_y - min_y;
 
-        if width <= 0.0 || height <= 0.0 {
-            println!("Invalid dimensions: width={}, height={}", width, height);
-            return;
-        }
-
-        // Use more padding for selections
-        let padding_percent = if is_selection { 0.5 } else { 0.1 }; // 50% padding for selection, 10% for full graph
-        let padded_width = width * (1.0 + 2.0 * padding_percent);
-        let padded_height = height * (1.0 + 2.0 * padding_percent);
+        // Use different padding for selection vs full graph
+        let padding_factor = if is_selection { 1.0 } else { 0.4 }; // More padding for selection
+        let padded_width = width * (1.0 + padding_factor);
+        let padded_height = height * (1.0 + padding_factor);
 
         let zoom_x = available_size.x / padded_width;
         let zoom_y = available_size.y / padded_height;
 
-        let new_zoom = zoom_x.min(zoom_y).clamp(0.5, 5.0);
-
-        if new_zoom.is_finite() && new_zoom > 0.0 {
-            self.zoom_level = new_zoom;
-
-            let graph_center_x = (min_x + max_x) / 2.0;
-            let graph_center_y = (min_y + max_y) / 2.0;
-            let screen_center_x = available_size.x / 2.0;
-            let screen_center_y = available_size.y / 2.0;
-
-            self.pan_offset = Vec2::new(
-                screen_center_x - (graph_center_x * self.zoom_level),
-                screen_center_y - (graph_center_y * self.zoom_level),
-            );
+        // Only update min_zoom_level when viewing the full graph
+        if !is_selection {
+            self.min_zoom_level = zoom_x.min(zoom_y) * 0.8;
         }
+
+        // For selection, allow zooming in more than the global minimum
+        let zoom_bounds = if is_selection {
+            (self.min_zoom_level * 0.1, 5.0) // Allow much more zoom for selections
+        } else {
+            (self.min_zoom_level, 5.0)
+        };
+
+        let new_zoom = zoom_x.min(zoom_y).clamp(zoom_bounds.0, zoom_bounds.1);
+        self.zoom_level = new_zoom;
+
+        // Center the view
+        let graph_center_x = (min_x + max_x) / 2.0;
+        let graph_center_y = (min_y + max_y) / 2.0;
+        let screen_center_x = available_size.x / 2.0;
+        let screen_center_y = available_size.y / 2.0;
+
+        self.pan_offset = Vec2::new(
+            screen_center_x - (graph_center_x * self.zoom_level),
+            screen_center_y - (graph_center_y * self.zoom_level),
+        );
     }
 
     fn graph_to_screen_pos(&self, pos: Pos2) -> Pos2 {
