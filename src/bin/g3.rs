@@ -19,6 +19,17 @@ const MAX_VELOCITY: f32 = 20.0;
 const MIN_MOVEMENT: f32 = 10.0; // Movement threshold to prevent nodes from jiggling
 const COMPONENT_SPACING: f32 = 500.0; // Minimum spacing between components
 
+mod colors {
+    use egui::Color32;
+
+    pub const NODE_DEFAULT: Color32 = Color32::from_rgb(51, 122, 183); // Modern blue
+    pub const NODE_SELECTED: Color32 = Color32::from_rgb(50, 205, 50); // Bright green
+    pub const NODE_PREVIEW: Color32 = Color32::from_rgb(144, 238, 144); // Light green
+    pub const NODE_NEIGHBOR: Color32 = Color32::from_rgb(255, 215, 0); // Gold
+    pub const STROKE_DEFAULT: Color32 = Color32::from_rgb(230, 230, 230); // Soft white
+    pub const EDGE: Color32 = Color32::from_rgb(160, 160, 160); // Light grey
+}
+
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about)]
 struct Args {
@@ -119,6 +130,21 @@ impl eframe::App for GraphVisualizerApp {
                 self.initial_layout_complete = true;
             }
             ctx.request_repaint();
+        }
+
+        // Add this section for keyboard panning
+        let pan_speed = 10.0 / self.zoom_level;
+        if ctx.input(|i| i.key_down(egui::Key::ArrowRight)) {
+            self.pan_offset.x += pan_speed;
+        }
+        if ctx.input(|i| i.key_down(egui::Key::ArrowLeft)) {
+            self.pan_offset.x -= pan_speed;
+        }
+        if ctx.input(|i| i.key_down(egui::Key::ArrowDown)) {
+            self.pan_offset.y += pan_speed;
+        }
+        if ctx.input(|i| i.key_down(egui::Key::ArrowUp)) {
+            self.pan_offset.y -= pan_speed;
         }
 
         egui::TopBottomPanel::top("controls").show(ctx, |ui| {
@@ -357,7 +383,7 @@ impl eframe::App for GraphVisualizerApp {
                         let screen_tgt = self.graph_to_screen_pos(tgt_pos);
                         painter.line_segment(
                             [screen_src, screen_tgt],
-                            Stroke::new(2.0 * self.zoom_level, Color32::GRAY),
+                            Stroke::new(2.0 * self.zoom_level, colors::EDGE),
                         );
                     }
                 }
@@ -381,18 +407,18 @@ impl eframe::App for GraphVisualizerApp {
                             // Determine node color
                             let node_color =
                                 if self.selection_state.selected_nodes.contains(&node_idx) {
-                                    Color32::from_rgb(0, 255, 0) // Green for selected nodes
+                                    colors::NODE_SELECTED
                                 } else if self.selection_state.preview_nodes.contains(&node_idx) {
-                                    Color32::from_rgb(0, 200, 100) // Light green for preview selection
+                                    colors::NODE_PREVIEW
                                 } else {
-                                    Color32::from_rgb(0, 100, 255) // Original blue for unselected nodes
+                                    colors::NODE_DEFAULT
                                 };
 
                             // Draw outer circle with highlight for neighbors
                             let stroke_color = if is_neighbor {
-                                Color32::from_rgb(255, 165, 0) // Subtle light yellow
+                                colors::NODE_NEIGHBOR
                             } else {
-                                Color32::WHITE
+                                colors::STROKE_DEFAULT
                             };
 
                             painter.circle_stroke(
