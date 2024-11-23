@@ -32,8 +32,11 @@ struct GraphVisualizerApp {
     velocities: HashMap<NodeIndex, Vec2>,
     is_dragging: Option<NodeIndex>,
     running_simulation: bool,
-    components: Vec<Vec<NodeIndex>>, // Store connected components
-    initialized: bool,               // Add this field to track initialization
+    components: Vec<Vec<NodeIndex>>,
+    initialized: bool,
+    zoom_level: f32,
+    pan_offset: Vec2,
+    viewport_bounds: Option<(Pos2, Pos2)>,
 }
 
 impl Default for GraphVisualizerApp {
@@ -46,18 +49,19 @@ impl Default for GraphVisualizerApp {
             running_simulation: true,
             components: Vec::new(),
             initialized: false,
+            zoom_level: 1.0,
+            pan_offset: Vec2::ZERO,
+            viewport_bounds: None,
         }
     }
 }
 
 impl eframe::App for GraphVisualizerApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Check if we need to initialize the layout
         if !self.initialized {
             let graph = self.graph_data.lock().unwrap();
             if !graph.node_indices().next().is_none() {
-                // Check if graph has nodes
-                drop(graph); // Release the lock before calling reset_layout
+                drop(graph);
                 self.reset_layout();
                 self.initialized = true;
             }
@@ -68,7 +72,9 @@ impl eframe::App for GraphVisualizerApp {
             ctx.request_repaint();
         }
 
-        // Add top panel for controls
+        // Get the full window size before creating any panels
+        let window_size = ctx.available_rect().size();
+
         egui::TopBottomPanel::top("controls").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 if ui
@@ -84,6 +90,11 @@ impl eframe::App for GraphVisualizerApp {
                 if ui.button("🔄 Reset Layout").clicked() {
                     self.reset_layout();
                 }
+                if ui.button("🔍 Fit to View").clicked() {
+                    self.fit_to_view(window_size);
+                }
+                // Display current zoom level for debugging
+                ui.label(format!("Zoom: {:.1}x", self.zoom_level));
             });
         });
 
@@ -91,9 +102,20 @@ impl eframe::App for GraphVisualizerApp {
             let (response, painter) =
                 ui.allocate_painter(ui.available_size(), egui::Sense::click_and_drag());
 
-            let pointer_pos = response.hover_pos();
+            // Handle zoom with scroll
+            if let Some(hover_pos) = response.hover_pos() {
+                let scroll_delta = ui.input(|i| i.raw_scroll_delta.y);
+                if scroll_delta != 0.0 {
+                    self.handle_zoom(scroll_delta, hover_pos);
+                }
+            }
 
-            // Handle dragging
+            // Transform pointer position to graph space
+            let pointer_pos = response
+                .hover_pos()
+                .map(|pos| self.screen_to_graph_pos(pos));
+
+            // Handle dragging with transform
             if response.dragged() {
                 if let Some(pos) = pointer_pos {
                     if let Some(node_idx) = self.is_dragging {
@@ -101,7 +123,6 @@ impl eframe::App for GraphVisualizerApp {
                         positions.insert(node_idx, pos);
                         self.velocities.insert(node_idx, Vec2::ZERO);
                     } else {
-                        // Check if we started dragging a node
                         let positions = self.positions.lock().unwrap();
                         for (idx, &node_pos) in positions.iter() {
                             if node_pos.distance(pos) < 15.0 {
@@ -115,35 +136,53 @@ impl eframe::App for GraphVisualizerApp {
                 self.is_dragging = None;
             }
 
-            // Draw the graph
+            // Draw the graph with transformations
             {
                 let graph = self.graph_data.lock().unwrap();
                 let positions = self.positions.lock().unwrap();
 
-                // Draw edges first (behind nodes)
+                // Draw edges
                 for edge in graph.edge_indices() {
                     let (source, target) = graph.edge_endpoints(edge).unwrap();
                     if let (Some(&src_pos), Some(&tgt_pos)) =
                         (positions.get(&source), positions.get(&target))
                     {
-                        painter.line_segment([src_pos, tgt_pos], Stroke::new(2.0, Color32::GRAY));
+                        let screen_src = self.graph_to_screen_pos(src_pos);
+                        let screen_tgt = self.graph_to_screen_pos(tgt_pos);
+                        painter.line_segment(
+                            [screen_src, screen_tgt],
+                            Stroke::new(2.0 * self.zoom_level, Color32::GRAY),
+                        );
                     }
                 }
 
                 // Draw nodes
                 for node_idx in graph.node_indices() {
                     if let Some(&position) = positions.get(&node_idx) {
+                        let screen_pos = self.graph_to_screen_pos(position);
                         if let Some(node) = graph.node_weight(node_idx) {
-                            // Draw circle with border
-                            painter.circle_stroke(position, 12.0, Stroke::new(2.0, Color32::WHITE));
-                            painter.circle_filled(position, 10.0, Color32::from_rgb(0, 100, 255));
+                            // Scale node size with zoom
+                            let node_radius = 12.0 * self.zoom_level;
+                            let stroke_width = 2.0 * self.zoom_level;
 
-                            // Draw text
+                            painter.circle_stroke(
+                                screen_pos,
+                                node_radius,
+                                Stroke::new(stroke_width, Color32::WHITE),
+                            );
+                            painter.circle_filled(
+                                screen_pos,
+                                node_radius - stroke_width,
+                                Color32::from_rgb(0, 100, 255),
+                            );
+
+                            // Scale font size with zoom
+                            let font_size = 14.0 * self.zoom_level;
                             painter.text(
-                                position,
+                                screen_pos,
                                 egui::Align2::CENTER_CENTER,
                                 node,
-                                egui::FontId::proportional(14.0),
+                                egui::FontId::proportional(font_size),
                                 Color32::WHITE,
                             );
                         }
@@ -155,6 +194,99 @@ impl eframe::App for GraphVisualizerApp {
 }
 
 impl GraphVisualizerApp {
+    fn fit_to_view(&mut self, available_size: Vec2) {
+        let positions = self.positions.lock().unwrap();
+        if positions.is_empty() {
+            return;
+        }
+
+        // Calculate bounds
+        let mut min_x = f32::MAX;
+        let mut min_y = f32::MAX;
+        let mut max_x = f32::MIN;
+        let mut max_y = f32::MIN;
+
+        for &pos in positions.values() {
+            min_x = min_x.min(pos.x);
+            min_y = min_y.min(pos.y);
+            max_x = max_x.max(pos.x);
+            max_y = max_y.max(pos.y);
+        }
+
+        // Ensure we have valid dimensions
+        if min_x.is_infinite() || min_y.is_infinite() || max_x.is_infinite() || max_y.is_infinite()
+        {
+            return;
+        }
+
+        // Add percentage-based padding
+        let width = max_x - min_x;
+        let height = max_y - min_y;
+
+        if width <= 0.0 || height <= 0.0 {
+            return;
+        }
+
+        let padding_percent = 0.1; // 10% padding
+        let padded_width = width * (1.0 + 2.0 * padding_percent);
+        let padded_height = height * (1.0 + 2.0 * padding_percent);
+
+        // Calculate the required zoom level
+        let zoom_x = available_size.x / padded_width;
+        let zoom_y = available_size.y / padded_height;
+
+        // Use the smaller zoom factor and ensure it's within bounds
+        let new_zoom = zoom_x.min(zoom_y).clamp(0.1, 5.0);
+
+        if new_zoom.is_finite() && new_zoom > 0.0 {
+            self.zoom_level = new_zoom;
+
+            // Calculate the center points
+            let graph_center_x = (min_x + max_x) / 2.0;
+            let graph_center_y = (min_y + max_y) / 2.0;
+            let screen_center_x = available_size.x / 2.0;
+            let screen_center_y = available_size.y / 2.0;
+
+            // Update pan offset to center the graph
+            self.pan_offset = Vec2::new(
+                screen_center_x - (graph_center_x * self.zoom_level),
+                screen_center_y - (graph_center_y * self.zoom_level),
+            );
+        }
+    }
+
+    fn handle_zoom(&mut self, scroll_delta: f32, center_pos: Pos2) {
+        let zoom_factor = if scroll_delta > 0.0 { 1.1 } else { 0.9 };
+        let old_zoom = self.zoom_level;
+
+        // Update zoom level with clamping
+        self.zoom_level = (self.zoom_level * zoom_factor).clamp(0.1, 5.0);
+
+        // If the zoom level didn't change (due to clamping), don't update the pan offset
+        if (self.zoom_level - old_zoom).abs() < f32::EPSILON {
+            return;
+        }
+
+        // Adjust pan offset to keep the point under the cursor stationary
+        let center_vec = Vec2::new(center_pos.x, center_pos.y);
+        self.pan_offset =
+            center_vec + (self.pan_offset - center_vec) * (self.zoom_level / old_zoom);
+    }
+
+    fn graph_to_screen_pos(&self, pos: Pos2) -> Pos2 {
+        Pos2::new(
+            pos.x * self.zoom_level + self.pan_offset.x,
+            pos.y * self.zoom_level + self.pan_offset.y,
+        )
+    }
+
+    fn screen_to_graph_pos(&self, pos: Pos2) -> Pos2 {
+        Pos2::new(
+            (pos.x - self.pan_offset.x) / self.zoom_level,
+            (pos.y - self.pan_offset.y) / self.zoom_level,
+        )
+    }
+
     fn find_components(&mut self) {
         let graph = self.graph_data.lock().unwrap();
         // Use kosaraju_scc which returns Vec<Vec<NodeIndex>>
