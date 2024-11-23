@@ -22,13 +22,52 @@ const COMPONENT_SPACING: f32 = 500.0; // Minimum spacing between components
 mod colors {
     use egui::Color32;
 
-    pub const NODE_DEFAULT: Color32 = Color32::from_rgb(51, 122, 183); // Modern blue
-    pub const NODE_SELECTED: Color32 = Color32::from_rgb(50, 205, 50); // Bright green
-    pub const NODE_PREVIEW: Color32 = Color32::from_rgb(144, 238, 144); // Light green
-    pub const NODE_NEIGHBOR: Color32 = Color32::from_rgb(255, 215, 0); // Gold
-    pub const STROKE_DEFAULT: Color32 = Color32::from_rgb(230, 230, 230); // Soft white
-    pub const EDGE: Color32 = Color32::from_rgb(160, 160, 160); // Light grey
+    // Modern Dark Theme
+    pub mod dark {
+        use super::*;
+        pub const NODE_DEFAULT: Color32 = Color32::from_rgb(88, 101, 242); // Discord-like blue
+        pub const NODE_SELECTED: Color32 = Color32::from_rgb(87, 242, 135); // Mint green
+        pub const NODE_PREVIEW: Color32 = Color32::from_rgb(114, 237, 242); // Cyan
+        pub const NODE_NEIGHBOR: Color32 = Color32::from_rgb(255, 178, 102); // Soft orange
+        pub const STROKE_DEFAULT: Color32 = Color32::from_rgb(200, 200, 200); // Light grey
+        pub const EDGE: Color32 = Color32::from_rgb(120, 120, 120); // Dark grey
+    }
+
+    // Modern Professional
+    pub mod professional {
+        use super::*;
+        pub const NODE_DEFAULT: Color32 = Color32::from_rgb(66, 133, 244); // Google blue
+        pub const NODE_SELECTED: Color32 = Color32::from_rgb(52, 168, 83); // Google green
+        pub const NODE_PREVIEW: Color32 = Color32::from_rgb(87, 182, 224); // Light blue
+        pub const NODE_NEIGHBOR: Color32 = Color32::from_rgb(251, 188, 4); // Google yellow
+        pub const STROKE_DEFAULT: Color32 = Color32::from_rgb(230, 230, 230); // Soft white
+        pub const EDGE: Color32 = Color32::from_rgb(160, 160, 160); // Medium grey
+    }
+
+    // Modern Vibrant
+    pub mod vibrant {
+        use super::*;
+        pub const NODE_DEFAULT: Color32 = Color32::from_rgb(100, 123, 255); // Vivid blue
+        pub const NODE_SELECTED: Color32 = Color32::from_rgb(72, 199, 142); // Emerald green
+        pub const NODE_PREVIEW: Color32 = Color32::from_rgb(120, 217, 255); // Sky blue
+        pub const NODE_NEIGHBOR: Color32 = Color32::from_rgb(255, 145, 85); // Coral
+        pub const STROKE_DEFAULT: Color32 = Color32::from_rgb(240, 240, 240); // Almost white
+        pub const EDGE: Color32 = Color32::from_rgb(180, 180, 180); // Light grey
+    }
+
+    // Modern Pastel
+    pub mod pastel {
+        use super::*;
+        pub const NODE_DEFAULT: Color32 = Color32::from_rgb(130, 170, 255); // Soft blue
+        pub const NODE_SELECTED: Color32 = Color32::from_rgb(144, 238, 144); // Light green
+        pub const NODE_PREVIEW: Color32 = Color32::from_rgb(171, 217, 255); // Lighter blue
+        pub const NODE_NEIGHBOR: Color32 = Color32::from_rgb(255, 218, 185); // Peach
+        pub const STROKE_DEFAULT: Color32 = Color32::from_rgb(220, 220, 220); // Very soft white
+        pub const EDGE: Color32 = Color32::from_rgb(190, 190, 190); // Soft grey
+    }
 }
+
+use colors::professional::*;
 
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about)]
@@ -383,7 +422,7 @@ impl eframe::App for GraphVisualizerApp {
                         let screen_tgt = self.graph_to_screen_pos(tgt_pos);
                         painter.line_segment(
                             [screen_src, screen_tgt],
-                            Stroke::new(2.0 * self.zoom_level, colors::EDGE),
+                            Stroke::new(2.0 * self.zoom_level, EDGE),
                         );
                     }
                 }
@@ -407,18 +446,18 @@ impl eframe::App for GraphVisualizerApp {
                             // Determine node color
                             let node_color =
                                 if self.selection_state.selected_nodes.contains(&node_idx) {
-                                    colors::NODE_SELECTED
+                                    NODE_SELECTED
                                 } else if self.selection_state.preview_nodes.contains(&node_idx) {
-                                    colors::NODE_PREVIEW
+                                    NODE_PREVIEW
                                 } else {
-                                    colors::NODE_DEFAULT
+                                    NODE_DEFAULT
                                 };
 
                             // Draw outer circle with highlight for neighbors
                             let stroke_color = if is_neighbor {
-                                colors::NODE_NEIGHBOR
+                                NODE_NEIGHBOR
                             } else {
-                                colors::STROKE_DEFAULT
+                                STROKE_DEFAULT
                             };
 
                             painter.circle_stroke(
