@@ -14,60 +14,40 @@ use std::{fs::File, thread};
 const SPRING_LENGTH: f32 = 12.5; // Increase for more spacing
 const SPRING_K: f32 = 0.05; // Reduced for more stability
 const REPULSION_K: f32 = 100_000.0; // Increase to encourage planarity
-const DAMPING: f32 = 0.7; // Increase to prevent oscillation
+const DAMPING: f32 = 0.8; // Increase to prevent oscillation
 const MAX_VELOCITY: f32 = 20.0;
 const MIN_MOVEMENT: f32 = 10.0; // Movement threshold to prevent nodes from jiggling
 const COMPONENT_SPACING: f32 = 500.0; // Minimum spacing between components
 
+const NODE_RADIUS: f32 = 12.0;
+
 mod colors {
     use egui::Color32;
 
-    // Modern Dark Theme
-    pub mod dark {
+    // Forest High Contrast
+    pub mod forest_bold {
         use super::*;
-        pub const NODE_DEFAULT: Color32 = Color32::from_rgb(88, 101, 242); // Discord-like blue
-        pub const NODE_SELECTED: Color32 = Color32::from_rgb(87, 242, 135); // Mint green
-        pub const NODE_PREVIEW: Color32 = Color32::from_rgb(114, 237, 242); // Cyan
-        pub const NODE_NEIGHBOR: Color32 = Color32::from_rgb(255, 178, 102); // Soft orange
-        pub const STROKE_DEFAULT: Color32 = Color32::from_rgb(200, 200, 200); // Light grey
-        pub const EDGE: Color32 = Color32::from_rgb(120, 120, 120); // Dark grey
+        pub const NODE_DEFAULT: Color32 = Color32::from_rgb(47, 95, 61); // Deep forest green
+        pub const NODE_SELECTED: Color32 = Color32::from_rgb(255, 166, 0); // Bright amber
+        pub const NODE_PREVIEW: Color32 = Color32::from_rgb(141, 227, 135); // Bright leaf green
+        pub const NODE_NEIGHBOR: Color32 = Color32::from_rgb(255, 89, 94); // Wild mushroom red
+        pub const STROKE_DEFAULT: Color32 = Color32::from_rgb(240, 250, 240); // Bright moss
+        pub const EDGE: Color32 = Color32::from_rgb(140, 140, 140); // Neutral grey
     }
 
-    // Modern Professional
-    pub mod professional {
+    // Mountain Lake High Contrast
+    pub mod mountain_bold {
         use super::*;
-        pub const NODE_DEFAULT: Color32 = Color32::from_rgb(66, 133, 244); // Google blue
-        pub const NODE_SELECTED: Color32 = Color32::from_rgb(52, 168, 83); // Google green
-        pub const NODE_PREVIEW: Color32 = Color32::from_rgb(87, 182, 224); // Light blue
-        pub const NODE_NEIGHBOR: Color32 = Color32::from_rgb(251, 188, 4); // Google yellow
-        pub const STROKE_DEFAULT: Color32 = Color32::from_rgb(230, 230, 230); // Soft white
-        pub const EDGE: Color32 = Color32::from_rgb(160, 160, 160); // Medium grey
-    }
-
-    // Modern Vibrant
-    pub mod vibrant {
-        use super::*;
-        pub const NODE_DEFAULT: Color32 = Color32::from_rgb(100, 123, 255); // Vivid blue
-        pub const NODE_SELECTED: Color32 = Color32::from_rgb(72, 199, 142); // Emerald green
-        pub const NODE_PREVIEW: Color32 = Color32::from_rgb(120, 217, 255); // Sky blue
-        pub const NODE_NEIGHBOR: Color32 = Color32::from_rgb(255, 145, 85); // Coral
-        pub const STROKE_DEFAULT: Color32 = Color32::from_rgb(240, 240, 240); // Almost white
-        pub const EDGE: Color32 = Color32::from_rgb(180, 180, 180); // Light grey
-    }
-
-    // Modern Pastel
-    pub mod pastel {
-        use super::*;
-        pub const NODE_DEFAULT: Color32 = Color32::from_rgb(130, 170, 255); // Soft blue
-        pub const NODE_SELECTED: Color32 = Color32::from_rgb(144, 238, 144); // Light green
-        pub const NODE_PREVIEW: Color32 = Color32::from_rgb(171, 217, 255); // Lighter blue
-        pub const NODE_NEIGHBOR: Color32 = Color32::from_rgb(255, 218, 185); // Peach
-        pub const STROKE_DEFAULT: Color32 = Color32::from_rgb(220, 220, 220); // Very soft white
-        pub const EDGE: Color32 = Color32::from_rgb(190, 190, 190); // Soft grey
+        pub const NODE_DEFAULT: Color32 = Color32::from_rgb(43, 101, 136); // Deep lake blue
+        pub const NODE_SELECTED: Color32 = Color32::from_rgb(255, 198, 30); // Bright sunlight
+        pub const NODE_PREVIEW: Color32 = Color32::from_rgb(110, 206, 255); // Sky reflection
+        pub const NODE_NEIGHBOR: Color32 = Color32::from_rgb(255, 117, 143); // Alpine rose
+        pub const STROKE_DEFAULT: Color32 = Color32::from_rgb(235, 245, 255); // Snow white
+        pub const EDGE: Color32 = Color32::from_rgb(150, 150, 150); // Neutral grey
     }
 }
 
-use colors::professional::*;
+use colors::forest_bold::*;
 
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about)]
@@ -383,7 +363,7 @@ impl eframe::App for GraphVisualizerApp {
                         } else {
                             let positions = self.positions.lock().unwrap();
                             for (idx, &node_pos) in positions.iter() {
-                                if node_pos.distance(pos) < 15.0 {
+                                if node_pos.distance(pos) < (NODE_RADIUS * 1.2) / self.zoom_level {
                                     self.is_dragging = Some(*idx);
                                     break;
                                 }
@@ -434,7 +414,7 @@ impl eframe::App for GraphVisualizerApp {
                     if let Some(&position) = positions.get(&node_idx) {
                         let screen_pos = self.graph_to_screen_pos(position);
                         if let Some(node) = graph.node_weight(node_idx) {
-                            let node_radius = 12.0 * self.zoom_level;
+                            let node_radius = NODE_RADIUS * self.zoom_level;
                             let stroke_width = 2.0 * self.zoom_level;
 
                             // Check if this node is a neighbor of the dragged node
