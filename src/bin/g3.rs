@@ -1,7 +1,7 @@
 use atty::Stream;
 use clap::Parser;
 use eframe::egui;
-use egui::{Color32, Pos2, Stroke, Vec2};
+use egui::{Color32, Pos2, Rect, Stroke, Vec2};
 use petgraph::algo::kosaraju_scc;
 use petgraph::graph::{Graph, NodeIndex};
 use petgraph::Undirected;
@@ -26,6 +26,28 @@ struct Args {
     input: Option<String>,
 }
 
+#[derive(PartialEq)]
+enum InteractionMode {
+    Pan,
+    Select,
+}
+
+struct SelectionState {
+    selected_nodes: HashSet<NodeIndex>,
+    drag_start: Option<Pos2>,
+    drag_end: Option<Pos2>,
+}
+
+impl Default for SelectionState {
+    fn default() -> Self {
+        Self {
+            selected_nodes: HashSet::new(),
+            drag_start: None,
+            drag_end: None,
+        }
+    }
+}
+
 struct GraphVisualizerApp {
     graph_data: Arc<Mutex<Graph<String, (), Undirected>>>,
     positions: Arc<Mutex<HashMap<NodeIndex, Pos2>>>,
@@ -37,6 +59,8 @@ struct GraphVisualizerApp {
     zoom_level: f32,
     pan_offset: Vec2,
     viewport_bounds: Option<(Pos2, Pos2)>,
+    interaction_mode: InteractionMode,
+    selection_state: SelectionState,
 }
 
 impl Default for GraphVisualizerApp {
@@ -52,21 +76,28 @@ impl Default for GraphVisualizerApp {
             zoom_level: 1.0,
             pan_offset: Vec2::ZERO,
             viewport_bounds: None,
+            interaction_mode: InteractionMode::Pan,
+            selection_state: SelectionState::default(),
         }
     }
 }
 
 impl eframe::App for GraphVisualizerApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Get the full window size before creating any panels
         let window_size = ctx.available_rect().size();
 
-        // Handle keyboard input
         if ctx.input(|i| i.key_pressed(egui::Key::H)) {
             self.fit_to_view(window_size);
         }
         if ctx.input(|i| i.key_pressed(egui::Key::Space)) {
             self.running_simulation = !self.running_simulation;
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::S)) {
+            self.interaction_mode = if self.interaction_mode == InteractionMode::Select {
+                InteractionMode::Pan
+            } else {
+                InteractionMode::Select
+            };
         }
 
         if !self.initialized {
@@ -101,7 +132,22 @@ impl eframe::App for GraphVisualizerApp {
                 if ui.button("🔍 Fit to View").clicked() {
                     self.fit_to_view(window_size);
                 }
-                // Display current zoom level for debugging
+
+                // Add selection mode toggle button
+                if ui
+                    .selectable_label(
+                        self.interaction_mode == InteractionMode::Select,
+                        "✋ Select Mode",
+                    )
+                    .clicked()
+                {
+                    self.interaction_mode = if self.interaction_mode == InteractionMode::Select {
+                        InteractionMode::Pan
+                    } else {
+                        InteractionMode::Select
+                    };
+                }
+
                 ui.label(format!("Zoom: {:.1}x", self.zoom_level));
             });
         });
@@ -110,7 +156,7 @@ impl eframe::App for GraphVisualizerApp {
             let (response, painter) =
                 ui.allocate_painter(ui.available_size(), egui::Sense::click_and_drag());
 
-            // Handle zoom with scroll
+            // Handle zoom
             if let Some(hover_pos) = response.hover_pos() {
                 let scroll_delta = ui.input(|i| i.raw_scroll_delta.y);
                 if scroll_delta != 0.0 {
@@ -118,33 +164,115 @@ impl eframe::App for GraphVisualizerApp {
                 }
             }
 
-            // Transform pointer position to graph space
             let pointer_pos = response
                 .hover_pos()
                 .map(|pos| self.screen_to_graph_pos(pos));
 
-            // Handle dragging with transform
-            if response.dragged() {
-                if let Some(pos) = pointer_pos {
-                    if let Some(node_idx) = self.is_dragging {
-                        let mut positions = self.positions.lock().unwrap();
-                        positions.insert(node_idx, pos);
-                        self.velocities.insert(node_idx, Vec2::ZERO);
-                    } else {
+            // Handle selection and dragging
+            let modifiers = ui.input(|i| i.modifiers);
+
+            if self.interaction_mode == InteractionMode::Select {
+                if response.dragged() {
+                    if let Some(pos) = response.hover_pos() {
+                        if self.selection_state.drag_start.is_none() {
+                            self.selection_state.drag_start = Some(pos);
+                        }
+                        self.selection_state.drag_end = Some(pos);
+                    }
+                } else if response.clicked() {
+                    if let Some(pos) = pointer_pos {
                         let positions = self.positions.lock().unwrap();
+                        let mut found_node = false;
+
                         for (idx, &node_pos) in positions.iter() {
                             if node_pos.distance(pos) < 15.0 {
-                                self.is_dragging = Some(*idx);
+                                if modifiers.ctrl {
+                                    // Toggle single node
+                                    if !self.selection_state.selected_nodes.remove(idx) {
+                                        self.selection_state.selected_nodes.insert(*idx);
+                                    }
+                                } else if modifiers.shift {
+                                    // Add to selection
+                                    self.selection_state.selected_nodes.insert(*idx);
+                                } else {
+                                    // New selection
+                                    self.selection_state.selected_nodes.clear();
+                                    self.selection_state.selected_nodes.insert(*idx);
+                                }
+                                found_node = true;
                                 break;
                             }
                         }
+
+                        if !found_node && !modifiers.ctrl && !modifiers.shift {
+                            self.selection_state.selected_nodes.clear();
+                        }
                     }
+                } else if response.drag_released() {
+                    if let (Some(start), Some(end)) = (
+                        self.selection_state.drag_start,
+                        self.selection_state.drag_end,
+                    ) {
+                        let selection_rect = Rect::from_two_pos(start, end);
+                        let positions = self.positions.lock().unwrap();
+
+                        for (idx, &pos) in positions.iter() {
+                            let screen_pos = self.graph_to_screen_pos(pos);
+                            if selection_rect.contains(screen_pos) {
+                                if modifiers.ctrl {
+                                    if !self.selection_state.selected_nodes.remove(idx) {
+                                        self.selection_state.selected_nodes.insert(*idx);
+                                    }
+                                } else if modifiers.shift {
+                                    self.selection_state.selected_nodes.insert(*idx);
+                                } else {
+                                    self.selection_state.selected_nodes.insert(*idx);
+                                }
+                            }
+                        }
+                    }
+
+                    self.selection_state.drag_start = None;
+                    self.selection_state.drag_end = None;
                 }
             } else {
-                self.is_dragging = None;
+                // Pan mode dragging logic
+                if response.dragged() {
+                    if let Some(pos) = pointer_pos {
+                        if let Some(node_idx) = self.is_dragging {
+                            let mut positions = self.positions.lock().unwrap();
+                            positions.insert(node_idx, pos);
+                            self.velocities.insert(node_idx, Vec2::ZERO);
+                        } else {
+                            let positions = self.positions.lock().unwrap();
+                            for (idx, &node_pos) in positions.iter() {
+                                if node_pos.distance(pos) < 15.0 {
+                                    self.is_dragging = Some(*idx);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    self.is_dragging = None;
+                }
             }
 
-            // Draw the graph with transformations
+            // Draw selection rectangle if in select mode and dragging
+            if self.interaction_mode == InteractionMode::Select {
+                if let (Some(start), Some(end)) = (
+                    self.selection_state.drag_start,
+                    self.selection_state.drag_end,
+                ) {
+                    painter.rect_stroke(
+                        Rect::from_two_pos(start, end),
+                        0.0,
+                        Stroke::new(1.0, Color32::WHITE),
+                    );
+                }
+            }
+
+            // Draw the graph
             {
                 let graph = self.graph_data.lock().unwrap();
                 let positions = self.positions.lock().unwrap();
@@ -169,9 +297,16 @@ impl eframe::App for GraphVisualizerApp {
                     if let Some(&position) = positions.get(&node_idx) {
                         let screen_pos = self.graph_to_screen_pos(position);
                         if let Some(node) = graph.node_weight(node_idx) {
-                            // Scale node size with zoom
                             let node_radius = 12.0 * self.zoom_level;
                             let stroke_width = 2.0 * self.zoom_level;
+
+                            // Change node color based on selection
+                            let node_color =
+                                if self.selection_state.selected_nodes.contains(&node_idx) {
+                                    Color32::from_rgb(0, 255, 0) // Green for selected nodes
+                                } else {
+                                    Color32::from_rgb(0, 100, 255) // Original blue for unselected nodes
+                                };
 
                             painter.circle_stroke(
                                 screen_pos,
@@ -181,23 +316,21 @@ impl eframe::App for GraphVisualizerApp {
                             painter.circle_filled(
                                 screen_pos,
                                 node_radius - stroke_width,
-                                Color32::from_rgb(0, 100, 255),
+                                node_color,
                             );
 
-                            // Calculate text position and dimensions
+                            // Node label rendering remains the same
                             let font_size = 14.0 * self.zoom_level;
                             let font = egui::FontId::proportional(font_size);
-                            let text_padding = 4.0 * self.zoom_level; // Padding around text
-                            let circle_spacing = 10.0 * self.zoom_level; // Increased space between circle and text
+                            let text_padding = 4.0 * self.zoom_level;
+                            let circle_spacing = 10.0 * self.zoom_level;
 
-                            // Calculate text dimensions
                             let galley = painter.layout_no_wrap(
                                 node.to_string(),
                                 font.clone(),
                                 Color32::WHITE,
                             );
 
-                            // Calculate background rectangle position and size
                             let text_pos = Pos2::new(
                                 screen_pos.x + node_radius + stroke_width + circle_spacing,
                                 screen_pos.y,
@@ -210,14 +343,8 @@ impl eframe::App for GraphVisualizerApp {
                                 ),
                             );
 
-                            // Draw background with 90% opacity
-                            painter.rect_filled(
-                                rect,
-                                4.0, // radius for rounded corners
-                                Color32::from_black_alpha(200),
-                            );
+                            painter.rect_filled(rect, 4.0, Color32::from_black_alpha(200));
 
-                            // Draw text
                             painter.text(
                                 text_pos,
                                 egui::Align2::LEFT_CENTER,
@@ -232,7 +359,6 @@ impl eframe::App for GraphVisualizerApp {
         });
     }
 }
-
 impl GraphVisualizerApp {
     fn handle_zoom(&mut self, scroll_delta: f32, center_pos: Pos2) {
         let zoom_factor = if scroll_delta > 0.0 { 1.1 } else { 0.9 };
