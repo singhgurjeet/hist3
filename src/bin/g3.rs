@@ -94,6 +94,8 @@ struct GraphVisualizerApp {
     selection_state: SelectionState,
     initial_layout_complete: bool,
     min_zoom_level: f32,
+    simulation_start_time: Option<std::time::Instant>,
+    frame_count: u64,
 }
 
 impl Default for GraphVisualizerApp {
@@ -112,6 +114,8 @@ impl Default for GraphVisualizerApp {
             selection_state: SelectionState::default(),
             initial_layout_complete: false,
             min_zoom_level: 0.5,
+            simulation_start_time: None,
+            frame_count: 0,
         }
     }
 }
@@ -639,6 +643,9 @@ impl GraphVisualizerApp {
     }
 
     fn reset_layout(&mut self, window_size: Vec2) {
+        self.simulation_start_time = None;
+        self.frame_count = 0;
+
         self.find_components();
 
         // Calculate grid layout for components
@@ -677,6 +684,12 @@ impl GraphVisualizerApp {
     }
 
     fn update_layout(&mut self) {
+        // Initialize simulation start time if not set
+        if self.simulation_start_time.is_none() {
+            self.simulation_start_time = Some(std::time::Instant::now());
+        }
+        self.frame_count += 1;
+
         let graph = self.graph_data.lock().unwrap();
         let mut positions = self.positions.lock().unwrap();
         let mut forces: HashMap<NodeIndex, Vec2> = HashMap::new();
@@ -817,9 +830,20 @@ impl GraphVisualizerApp {
             }
         }
 
+        // Calculate adaptive movement threshold
+        let base_threshold = MIN_MOVEMENT;
+        let elapsed = self.simulation_start_time.unwrap().elapsed().as_secs_f32();
+        let frame_factor = (self.frame_count as f32 / 100.0).min(1.0); // Ramp up over first 100 frames
+
+        // Increase threshold based on time and frames
+        let time_factor = (elapsed / 2.0).min(3.0); // Max 3x increase over 2 seconds
+        let adaptive_threshold = base_threshold * (1.0 + time_factor * frame_factor);
+
         // Stop simulation if movement is very small
-        if max_movement < MIN_MOVEMENT {
+        if max_movement < adaptive_threshold {
             self.running_simulation = false;
+            self.simulation_start_time = None;
+            self.frame_count = 0;
         }
     }
 
