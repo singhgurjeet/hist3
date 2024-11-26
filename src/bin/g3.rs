@@ -514,6 +514,21 @@ impl eframe::App for GraphVisualizerApp {
                         }
                     }
                 }
+
+                // Add stats at the bottom
+                let node_count = graph.node_count();
+                let edge_count = graph.edge_count();
+                let component_count = self.components.len();
+                let selected_count = self.selection_state.selected_nodes.len();
+
+                egui::TopBottomPanel::bottom("stats").show(ctx, |ui| {
+                    ui.horizontal_centered(|ui| {
+                        ui.label(format!(
+                            "Nodes: {} | Edges: {} | Components: {} | Selected: {}",
+                            node_count, edge_count, component_count, selected_count
+                        ));
+                    });
+                });
             }
         });
     }
