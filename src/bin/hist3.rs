@@ -8,6 +8,7 @@ use eframe::egui;
 use egui_plot::{Bar, BarChart, Legend, Plot};
 use hist3::data;
 use hist3::data::InputSource;
+use std::ops::RangeInclusive;
 use std::path::Path;
 
 #[derive(clap::Parser, Debug)]
@@ -52,7 +53,9 @@ fn main() -> Result<(), eframe::Error> {
     let plot = PlotApp::new(labels_and_counts, p_25, p_50, p_75, total, range, args.bins);
 
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([800.0, 600.0]),
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([1024.0, 600.0]) // Wider default window
+            .with_min_inner_size([400.0, 300.0]), // Set minimum size
         ..Default::default()
     };
     eframe::run_native(title.as_str(), options, Box::new(|_| Ok(Box::new(plot))))
@@ -68,6 +71,7 @@ struct PlotApp {
     num_bins: usize,
     grid: bool,
     axes: bool,
+    selection: Option<RangeInclusive<usize>>,
 }
 
 impl PlotApp {
@@ -90,17 +94,8 @@ impl PlotApp {
             num_bins,
             grid: true,
             axes: true,
+            selection: None,
         }
-    }
-
-    fn set_grid(mut self, grid: bool) -> Self {
-        self.grid = grid;
-        self
-    }
-
-    fn set_axes(mut self, axes: bool) -> Self {
-        self.axes = axes;
-        self
     }
 }
 
@@ -116,25 +111,137 @@ impl eframe::App for PlotApp {
                 .iter()
                 .enumerate()
                 .map(|(i, (label, count))| {
-                    if self.p_25.is_some() {
+                    let mut bar = if self.p_25.is_some() {
                         Bar::new(label.parse::<f64>().unwrap(), *count as f64)
                             .width(width)
                             .name(label)
                     } else {
                         Bar::new(i as f64, *count as f64).width(1.0).name(label)
+                    };
+
+                    if let Some(range) = &self.selection {
+                        if range.contains(&i) {
+                            bar = bar.fill(egui::Color32::from_rgb(255, 165, 0));
+                        }
                     }
+                    bar
                 })
                 .collect(),
         );
 
         egui::CentralPanel::default().show(ctx, |ui| {
             Plot::new("")
-                .allow_boxed_zoom(true)
+                .allow_boxed_zoom(false)
                 .allow_drag(false)
+                .allow_scroll(false)
                 .legend(Legend::default())
                 .show_grid(self.grid)
                 .show_axes(self.axes)
-                .show(ui, |plot_ui| plot_ui.bar_chart(chart));
+                .x_axis_label(" ")
+                .label_formatter(|name, value| {
+                    if !name.is_empty() {
+                        name.to_owned()
+                    } else {
+                        format!("{:.1}", value.x)
+                    }
+                })
+                .show(ui, |plot_ui| {
+                    if let Some(pointer) = plot_ui.pointer_coordinate() {
+                        if plot_ui.ctx().input(|i| i.pointer.primary_clicked()) {
+                            let bar_index = if self.p_25.is_some() {
+                                let value = pointer.x;
+                                let bin_width = self.range / self.num_bins as f64;
+                                (value / bin_width).floor() as usize
+                            } else {
+                                pointer.x.floor() as usize
+                            };
+
+                            if bar_index < self.data.len() {
+                                if let Some(range) = &self.selection {
+                                    if range.contains(&bar_index) {
+                                        self.selection = None;
+                                    } else {
+                                        self.selection = Some(bar_index..=bar_index);
+                                    }
+                                } else {
+                                    self.selection = Some(bar_index..=bar_index);
+                                }
+                            } else {
+                                self.selection = None;
+                            }
+                        } else if plot_ui.ctx().input(|i| i.pointer.primary_down()) {
+                            if let Some(range) = &mut self.selection {
+                                let current_bar = if self.p_25.is_some() {
+                                    let value = pointer.x;
+                                    let bin_width = self.range / self.num_bins as f64;
+                                    (value / bin_width).floor() as usize
+                                } else {
+                                    pointer.x.floor() as usize
+                                };
+
+                                if current_bar < self.data.len() {
+                                    let start = *range.start();
+                                    *range = if current_bar < start {
+                                        current_bar..=start
+                                    } else {
+                                        start..=current_bar
+                                    };
+                                }
+                            }
+                        }
+                    }
+                    plot_ui.bar_chart(chart.width(width * 0.92));
+
+                    if let Some((_, x)) = self.p_25 {
+                        plot_ui.vline(
+                            egui_plot::VLine::new(x)
+                                .color(egui::Color32::LIGHT_BLUE)
+                                .name("25th percentile"),
+                        );
+                    }
+                    if let Some((_, x)) = self.p_50 {
+                        plot_ui.vline(
+                            egui_plot::VLine::new(x)
+                                .color(egui::Color32::LIGHT_GREEN)
+                                .name("50th percentile"),
+                        );
+                    }
+                    if let Some((_, x)) = self.p_75 {
+                        plot_ui.vline(
+                            egui_plot::VLine::new(x)
+                                .color(egui::Color32::LIGHT_RED)
+                                .name("75th percentile"),
+                        );
+                    }
+                });
+        });
+
+        egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(format!("Total Points: {} |", self.total as usize));
+
+                if let Some(range) = &self.selection {
+                    let selected_data: Vec<_> = self
+                        .data
+                        .iter()
+                        .enumerate()
+                        .filter(|(i, _)| range.contains(i))
+                        .map(|(_, (_, count))| *count)
+                        .collect();
+
+                    ui.label(format!("Selected bars: {} |", selected_data.len()));
+                    if let (Some(&min), Some(&max)) =
+                        (selected_data.iter().min(), selected_data.iter().max())
+                    {
+                        ui.label(format!("Min count: {} |", min));
+                        ui.label(format!("Max count: {} |", max));
+                        ui.label(format!(
+                            "Total in selection: {}",
+                            selected_data.iter().copied().sum::<usize>()
+                        ));
+                    }
+                }
+            });
         });
     }
 }
