@@ -834,11 +834,12 @@ impl GraphVisualizerApp {
                     let old_pos = *pos;
                     *pos = old_pos + *velocity;
 
-                    // Keep nodes within reasonable bounds
-                    let max_x = COMPONENT_SPACING * (self.components.len() as f32);
-                    let max_y = COMPONENT_SPACING * (self.components.len() as f32);
-                    pos.x = pos.x.clamp(100.0, max_x);
-                    pos.y = pos.y.clamp(100.0, max_y);
+                    // Remove bounds clamping to allow nodes to spread freely
+                    // Commented out the code that restricts nodes within a virtual square
+                    // let max_x = COMPONENT_SPACING * (self.components.len() as f32);
+                    // let max_y = COMPONENT_SPACING * (self.components.len() as f32);
+                    // pos.x = pos.x.clamp(100.0, max_x);
+                    // pos.y = pos.y.clamp(100.0, max_y);
 
                     max_movement = max_movement.max((*velocity).length());
                 }
@@ -895,19 +896,23 @@ fn parse_input(
 
     for line in input.lines() {
         let parts: Vec<&str> = line.split_whitespace().collect();
-        match parts.len() {
-            0 => continue, // Skip empty lines
-            1 => {
-                // Single node
-                unique_nodes.insert(parts[0].to_string());
-            }
-            _ => {
-                // Edge (take first two parts even if there are more)
-                let node1 = parts[0].to_string();
-                let node2 = parts[1].to_string();
-                unique_nodes.insert(node1.clone());
-                unique_nodes.insert(node2.clone());
-                edges.push((node1, node2));
+        if parts.is_empty() {
+            continue; // Skip empty lines
+        }
+
+        // Insert all nodes into unique_nodes
+        for part in &parts {
+            unique_nodes.insert(part.to_string());
+        }
+
+        // If there are more than one node, create edges between all pairs
+        if parts.len() >= 2 {
+            for i in 0..parts.len() {
+                for j in (i + 1)..parts.len() {
+                    let node1 = parts[i].to_string();
+                    let node2 = parts[j].to_string();
+                    edges.push((node1, node2));
+                }
             }
         }
     }
