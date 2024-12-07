@@ -533,6 +533,12 @@ impl eframe::App for GraphVisualizerApp {
                 // Draw edges
                 for edge in graph.edge_indices() {
                     let (source, target) = graph.edge_endpoints(edge).unwrap();
+                    let weight = *graph.edge_weight(edge).unwrap_or(&0.0);
+
+                    if self.weighted && weight >= self.max_weight {
+                        continue; // Skip drawing this edge
+                    }
+
                     if let (Some(&src_pos), Some(&tgt_pos)) =
                         (positions.get(&source), positions.get(&target))
                     {
@@ -563,7 +569,16 @@ impl eframe::App for GraphVisualizerApp {
                             let is_neighbor = self
                                 .is_dragging
                                 .map(|dragged_idx| {
-                                    graph.neighbors(dragged_idx).any(|n| n == node_idx)
+                                    graph.neighbors(dragged_idx).any(|n| {
+                                        n == node_idx
+                                            && (!self.weighted
+                                                || graph
+                                                    .edge_weight(
+                                                        graph.find_edge(dragged_idx, n).unwrap(),
+                                                    )
+                                                    .unwrap_or(&f64::INFINITY)
+                                                    <= &self.max_weight)
+                                    })
                                 })
                                 .unwrap_or(false);
 
@@ -883,22 +898,32 @@ impl GraphVisualizerApp {
             for &node1 in component {
                 for neighbor in graph.neighbors(node1) {
                     if component.contains(&neighbor) {
-                        if let (Some(&pos1), Some(&pos2)) =
-                            (positions.get(&node1), positions.get(&neighbor))
-                        {
-                            let delta = pos1 - pos2;
-                            let distance = delta.length().max(1.0);
+                        // Add check for edge weight if graph is weighted
+                        let edge_weight_valid = !self.weighted
+                            || graph
+                                .find_edge(node1, neighbor)
+                                .and_then(|edge| graph.edge_weight(edge))
+                                .map_or(false, |&weight| weight <= self.max_weight);
 
-                            let spring_k = if distance > SPRING_LENGTH * 2.0 {
-                                SPRING_K * 2.0
-                            } else {
-                                SPRING_K
-                            };
+                        if edge_weight_valid {
+                            if let (Some(&pos1), Some(&pos2)) =
+                                (positions.get(&node1), positions.get(&neighbor))
+                            {
+                                let delta = pos1 - pos2;
+                                let distance = delta.length().max(1.0);
 
-                            let force = delta.normalized() * (distance - SPRING_LENGTH) * -spring_k;
+                                let spring_k = if distance > SPRING_LENGTH * 2.0 {
+                                    SPRING_K * 2.0
+                                } else {
+                                    SPRING_K
+                                };
 
-                            if self.is_dragging != Some(node1) {
-                                *forces.get_mut(&node1).unwrap() += force;
+                                let force =
+                                    delta.normalized() * (distance - SPRING_LENGTH) * -spring_k;
+
+                                if self.is_dragging != Some(node1) {
+                                    *forces.get_mut(&node1).unwrap() += force;
+                                }
                             }
                         }
                     }
@@ -950,13 +975,6 @@ impl GraphVisualizerApp {
                 if let Some(pos) = positions.get_mut(&node_idx) {
                     let old_pos = *pos;
                     *pos = old_pos + *velocity;
-
-                    // Remove bounds clamping to allow nodes to spread freely
-                    // Commented out the code that restricts nodes within a virtual square
-                    // let max_x = COMPONENT_SPACING * (self.components.len() as f32);
-                    // let max_y = COMPONENT_SPACING * (self.components.len() as f32);
-                    // pos.x = pos.x.clamp(100.0, max_x);
-                    // pos.y = pos.y.clamp(100.0, max_y);
 
                     max_movement = max_movement.max((*velocity).length());
                 }
