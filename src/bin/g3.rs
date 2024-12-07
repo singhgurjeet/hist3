@@ -146,7 +146,7 @@ struct GraphVisualizerApp {
     graph_data: Arc<Mutex<Graph<String, f64, Undirected>>>,
     weight_histogram: Arc<Mutex<Histogram>>,
     weighted: bool,
-    max_weight: f64,
+    min_weight: f64,
     positions: Arc<Mutex<HashMap<NodeIndex, Pos2>>>,
     velocities: HashMap<NodeIndex, Vec2>,
     is_dragging: Option<NodeIndex>,
@@ -175,7 +175,7 @@ impl Default for GraphVisualizerApp {
                 bin_width: 0.0,
             })),
             weighted: false,
-            max_weight: f64::INFINITY,
+            min_weight: f64::NEG_INFINITY,
             positions: Arc::new(Mutex::new(HashMap::new())),
             velocities: HashMap::new(),
             is_dragging: None,
@@ -274,16 +274,16 @@ impl eframe::App for GraphVisualizerApp {
                         };
 
                         ui.label("Weight Filter");
-                        let mut weight_value = if self.max_weight == f64::INFINITY {
+                        let mut weight_value = if self.min_weight == f64::INFINITY {
                             max
                         } else {
-                            self.max_weight
+                            self.min_weight
                         };
                         if ui
                             .add(egui::Slider::new(&mut weight_value, min..=max).show_value(true))
                             .changed()
                         {
-                            self.max_weight = weight_value;
+                            self.min_weight = weight_value;
                         }
                     });
                 }
@@ -535,7 +535,7 @@ impl eframe::App for GraphVisualizerApp {
                     let (source, target) = graph.edge_endpoints(edge).unwrap();
                     let weight = *graph.edge_weight(edge).unwrap_or(&0.0);
 
-                    if self.weighted && weight >= self.max_weight {
+                    if self.weighted && weight <= self.min_weight {
                         continue; // Skip drawing this edge
                     }
 
@@ -577,7 +577,7 @@ impl eframe::App for GraphVisualizerApp {
                                                         graph.find_edge(dragged_idx, n).unwrap(),
                                                     )
                                                     .unwrap_or(&f64::INFINITY)
-                                                    <= &self.max_weight)
+                                                    >= &self.min_weight)
                                     })
                                 })
                                 .unwrap_or(false);
@@ -903,7 +903,7 @@ impl GraphVisualizerApp {
                             || graph
                                 .find_edge(node1, neighbor)
                                 .and_then(|edge| graph.edge_weight(edge))
-                                .map_or(false, |&weight| weight <= self.max_weight);
+                                .map_or(false, |&weight| weight >= self.min_weight);
 
                         if edge_weight_valid {
                             if let (Some(&pos1), Some(&pos2)) =
