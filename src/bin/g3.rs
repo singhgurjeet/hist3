@@ -47,7 +47,55 @@ mod colors {
     }
 }
 
-use colors::forest_bold::*;
+#[derive(Clone, Copy, PartialEq)]
+enum ColorTheme {
+    ForestBold,
+    MountainBold,
+}
+
+impl ColorTheme {
+    fn node_default(&self) -> Color32 {
+        match self {
+            ColorTheme::ForestBold => colors::forest_bold::NODE_DEFAULT,
+            ColorTheme::MountainBold => colors::mountain_bold::NODE_DEFAULT,
+        }
+    }
+
+    fn node_selected(&self) -> Color32 {
+        match self {
+            ColorTheme::ForestBold => colors::forest_bold::NODE_SELECTED,
+            ColorTheme::MountainBold => colors::mountain_bold::NODE_SELECTED,
+        }
+    }
+
+    fn node_preview(&self) -> Color32 {
+        match self {
+            ColorTheme::ForestBold => colors::forest_bold::NODE_PREVIEW,
+            ColorTheme::MountainBold => colors::mountain_bold::NODE_PREVIEW,
+        }
+    }
+
+    fn node_neighbor(&self) -> Color32 {
+        match self {
+            ColorTheme::ForestBold => colors::forest_bold::NODE_NEIGHBOR,
+            ColorTheme::MountainBold => colors::mountain_bold::NODE_NEIGHBOR,
+        }
+    }
+
+    fn stroke_default(&self) -> Color32 {
+        match self {
+            ColorTheme::ForestBold => colors::forest_bold::STROKE_DEFAULT,
+            ColorTheme::MountainBold => colors::mountain_bold::STROKE_DEFAULT,
+        }
+    }
+
+    fn edge(&self) -> Color32 {
+        match self {
+            ColorTheme::ForestBold => colors::forest_bold::EDGE,
+            ColorTheme::MountainBold => colors::mountain_bold::EDGE,
+        }
+    }
+}
 
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about)]
@@ -96,6 +144,7 @@ struct GraphVisualizerApp {
     min_zoom_level: f32,
     simulation_start_time: Option<std::time::Instant>,
     frame_count: u64,
+    color_theme: ColorTheme,
 }
 
 impl Default for GraphVisualizerApp {
@@ -116,6 +165,7 @@ impl Default for GraphVisualizerApp {
             min_zoom_level: 0.5,
             simulation_start_time: None,
             frame_count: 0,
+            color_theme: ColorTheme::ForestBold,
         }
     }
 }
@@ -205,6 +255,25 @@ impl eframe::App for GraphVisualizerApp {
                         InteractionMode::Select
                     };
                 }
+
+                // Add theme selection combo box
+                egui::ComboBox::from_label("Theme")
+                    .selected_text(match self.color_theme {
+                        ColorTheme::ForestBold => "Forest",
+                        ColorTheme::MountainBold => "Mountain",
+                    })
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut self.color_theme,
+                            ColorTheme::ForestBold,
+                            "Forest",
+                        );
+                        ui.selectable_value(
+                            &mut self.color_theme,
+                            ColorTheme::MountainBold,
+                            "Mountain",
+                        );
+                    });
 
                 ui.label(format!("Zoom: {:.1}x", self.zoom_level));
                 let graph = self.graph_data.lock().unwrap();
@@ -429,8 +498,10 @@ impl eframe::App for GraphVisualizerApp {
                         // Clamp to reasonable limits
                         let thickness = base_thickness.clamp(0.5, 1.5);
 
-                        painter
-                            .line_segment([screen_src, screen_tgt], Stroke::new(thickness, EDGE));
+                        painter.line_segment(
+                            [screen_src, screen_tgt],
+                            Stroke::new(thickness, self.color_theme.edge()),
+                        );
                     }
                 }
 
@@ -453,18 +524,18 @@ impl eframe::App for GraphVisualizerApp {
                             // Determine node color
                             let node_color =
                                 if self.selection_state.selected_nodes.contains(&node_idx) {
-                                    NODE_SELECTED
+                                    self.color_theme.node_selected()
                                 } else if self.selection_state.preview_nodes.contains(&node_idx) {
-                                    NODE_PREVIEW
+                                    self.color_theme.node_preview()
                                 } else {
-                                    NODE_DEFAULT
+                                    self.color_theme.node_default()
                                 };
 
                             // Draw outer circle with highlight for neighbors
                             let stroke_color = if is_neighbor {
-                                NODE_NEIGHBOR
+                                self.color_theme.node_neighbor()
                             } else {
-                                STROKE_DEFAULT
+                                self.color_theme.stroke_default()
                             };
 
                             painter.circle_stroke(
