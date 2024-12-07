@@ -274,8 +274,8 @@ impl eframe::App for GraphVisualizerApp {
                         };
 
                         ui.label("Weight Filter");
-                        let mut weight_value = if self.min_weight == f64::INFINITY {
-                            max
+                        let mut weight_value = if self.min_weight == f64::NEG_INFINITY {
+                            min
                         } else {
                             self.min_weight
                         };
