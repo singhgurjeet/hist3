@@ -102,6 +102,10 @@ impl ColorTheme {
 struct Args {
     /// Input file
     input: Option<String>,
+
+    /// Is the graph weighted? If yes, input is like node_1\tnode_2\tweight
+    #[arg(long, short)]
+    weighted: bool,
 }
 
 #[derive(PartialEq)]
@@ -129,7 +133,8 @@ impl Default for SelectionState {
 }
 
 struct GraphVisualizerApp {
-    graph_data: Arc<Mutex<Graph<String, (), Undirected>>>,
+    graph_data: Arc<Mutex<Graph<String, f64, Undirected>>>,
+    weighted: bool,
     positions: Arc<Mutex<HashMap<NodeIndex, Pos2>>>,
     velocities: HashMap<NodeIndex, Vec2>,
     is_dragging: Option<NodeIndex>,
@@ -151,6 +156,7 @@ impl Default for GraphVisualizerApp {
     fn default() -> Self {
         Self {
             graph_data: Arc::new(Mutex::new(Graph::new_undirected())),
+            weighted: false,
             positions: Arc::new(Mutex::new(HashMap::new())),
             velocities: HashMap::new(),
             is_dragging: None,
@@ -957,9 +963,10 @@ impl GraphVisualizerApp {
     }
 }
 fn parse_input(
-    graph_ref: &Arc<Mutex<Graph<String, (), Undirected>>>,
+    graph_ref: &Arc<Mutex<Graph<String, f64, Undirected>>>,
     positions_ref: &Arc<Mutex<HashMap<NodeIndex, Pos2>>>,
     input: &str,
+    weighted: bool,
 ) {
     // First, collect all unique nodes and edges
     let mut unique_nodes = HashSet::new();
@@ -972,17 +979,28 @@ fn parse_input(
         }
 
         // Insert all nodes into unique_nodes
-        for part in &parts {
-            unique_nodes.insert(part.to_string());
+        if weighted {
+            unique_nodes.insert(parts[0].to_string());
+            unique_nodes.insert(parts[1].to_string());
+        } else {
+            for part in &parts {
+                unique_nodes.insert(part.to_string());
+            }
         }
 
-        // If there are more than one node, create edges between all pairs
-        if parts.len() >= 2 {
+        if weighted {
+            let node1 = parts[0].to_string();
+            let node2 = parts[1].to_string();
+            let weight: f64 = parts[2]
+                .parse()
+                .unwrap_or_else(|_| panic!("Invalid weight value: {}", parts[2]));
+            edges.push((node1, node2, weight));
+        } else if parts.len() >= 2 {
             for i in 0..parts.len() {
                 for j in (i + 1)..parts.len() {
                     let node1 = parts[i].to_string();
                     let node2 = parts[j].to_string();
-                    edges.push((node1, node2));
+                    edges.push((node1, node2, 1.0)); // Default weight for unweighted edges
                 }
             }
         }
@@ -1011,19 +1029,23 @@ fn parse_input(
     }
 
     // Second pass: create all edges
-    for (node1, node2) in edges {
+    for (node1, node2, weight) in edges {
         let node1_index = node_indices[&node1];
         let node2_index = node_indices[&node2];
         // Only add edge if it doesn't already exist
         if !graph.contains_edge(node1_index, node2_index) {
-            graph.add_edge(node1_index, node2_index, ());
+            graph.add_edge(node1_index, node2_index, weight);
         }
     }
 }
 
 fn main() -> Result<(), eframe::Error> {
     let args = Args::parse();
-    let graph_app = GraphVisualizerApp::default();
+    println!("{:?}", args);
+    let graph_app = GraphVisualizerApp {
+        weighted: args.weighted,
+        ..GraphVisualizerApp::default()
+    };
     let graph_ref = graph_app.graph_data.clone();
     let positions_ref = graph_app.positions.clone();
 
@@ -1043,7 +1065,7 @@ fn main() -> Result<(), eframe::Error> {
                 .filter_map(Result::ok)
                 .collect::<Vec<String>>()
                 .join("\n");
-            parse_input(&graph_ref, &positions_ref, &content);
+            parse_input(&graph_ref, &positions_ref, &content, args.weighted);
         } else {
             if !Path::new(&input).exists() {
                 panic!("File does not exist");
@@ -1055,7 +1077,7 @@ fn main() -> Result<(), eframe::Error> {
                 .filter_map(Result::ok)
                 .collect::<Vec<String>>()
                 .join("\n");
-            parse_input(&graph_ref, &positions_ref, &content);
+            parse_input(&graph_ref, &positions_ref, &content, args.weighted);
         }
     });
 
