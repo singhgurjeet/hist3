@@ -1,5 +1,6 @@
 use atty::Stream;
 use clap::Parser;
+use core::f64;
 use eframe::egui;
 use egui::{Color32, Pos2, Rect, Stroke, Vec2};
 use petgraph::algo::kosaraju_scc;
@@ -33,6 +34,7 @@ mod colors {
         pub const NODE_NEIGHBOR: Color32 = Color32::from_rgb(255, 89, 94); // Wild mushroom red
         pub const STROKE_DEFAULT: Color32 = Color32::from_rgb(240, 250, 240); // Bright moss
         pub const EDGE: Color32 = Color32::from_rgb(140, 140, 140); // Neutral grey
+        pub const HISTOGRAM_BAR: Color32 = Color32::from_rgb(76, 175, 80); // Fresh pine green
     }
 
     // Mountain Lake High Contrast
@@ -44,6 +46,7 @@ mod colors {
         pub const NODE_NEIGHBOR: Color32 = Color32::from_rgb(255, 117, 143); // Alpine rose
         pub const STROKE_DEFAULT: Color32 = Color32::from_rgb(235, 245, 255); // Snow white
         pub const EDGE: Color32 = Color32::from_rgb(150, 150, 150); // Neutral grey
+        pub const HISTOGRAM_BAR: Color32 = Color32::from_rgb(0, 143, 204); // Clear lake blue
     }
 }
 
@@ -95,6 +98,13 @@ impl ColorTheme {
             ColorTheme::MountainBold => colors::mountain_bold::EDGE,
         }
     }
+
+    fn histogram_bar_color(&self) -> Color32 {
+        match self {
+            ColorTheme::ForestBold => colors::forest_bold::HISTOGRAM_BAR,
+            ColorTheme::MountainBold => colors::mountain_bold::HISTOGRAM_BAR,
+        }
+    }
 }
 
 #[derive(clap::Parser, Debug)]
@@ -134,7 +144,9 @@ impl Default for SelectionState {
 
 struct GraphVisualizerApp {
     graph_data: Arc<Mutex<Graph<String, f64, Undirected>>>,
+    weight_histogram: Arc<Mutex<Histogram>>,
     weighted: bool,
+    max_weight: f64,
     positions: Arc<Mutex<HashMap<NodeIndex, Pos2>>>,
     velocities: HashMap<NodeIndex, Vec2>,
     is_dragging: Option<NodeIndex>,
@@ -156,7 +168,14 @@ impl Default for GraphVisualizerApp {
     fn default() -> Self {
         Self {
             graph_data: Arc::new(Mutex::new(Graph::new_undirected())),
+            weight_histogram: Arc::new(Mutex::new(Histogram {
+                bins: Vec::new(),
+                min: 0.0,
+                max: 0.0,
+                bin_width: 0.0,
+            })),
             weighted: false,
+            max_weight: f64::INFINITY,
             positions: Arc::new(Mutex::new(HashMap::new())),
             velocities: HashMap::new(),
             is_dragging: None,
@@ -247,6 +266,28 @@ impl eframe::App for GraphVisualizerApp {
                     self.fit_to_view(window_size);
                 }
 
+                if self.weighted {
+                    ui.horizontal(|ui| {
+                        let (min, max) = {
+                            let histogram = self.weight_histogram.lock().unwrap();
+                            (histogram.min, histogram.max)
+                        };
+
+                        ui.label("Weight Filter");
+                        let mut weight_value = if self.max_weight == f64::INFINITY {
+                            max
+                        } else {
+                            self.max_weight
+                        };
+                        if ui
+                            .add(egui::Slider::new(&mut weight_value, min..=max).show_value(true))
+                            .changed()
+                        {
+                            self.max_weight = weight_value;
+                        }
+                    });
+                }
+
                 // Add selection mode toggle button
                 if ui
                     .selectable_label(
@@ -292,7 +333,6 @@ impl eframe::App for GraphVisualizerApp {
                 if !names.is_empty() {
                     ctx.output_mut(|o| o.copied_text = names.join("\t"));
                 }
-                ui.label(format!("Selected: {}", names.join(", ")));
             });
         });
 
@@ -962,15 +1002,29 @@ impl GraphVisualizerApp {
         center
     }
 }
+
+/// Simple histogram struct to help with rendering histograms
+struct Histogram {
+    bins: Vec<usize>,
+    min: f64,
+    max: f64,
+    bin_width: f64,
+}
+
 fn parse_input(
     graph_ref: &Arc<Mutex<Graph<String, f64, Undirected>>>,
     positions_ref: &Arc<Mutex<HashMap<NodeIndex, Pos2>>>,
+    histograph_ref: &Arc<Mutex<Histogram>>,
     input: &str,
     weighted: bool,
 ) {
     // First, collect all unique nodes and edges
     let mut unique_nodes = HashSet::new();
     let mut edges = Vec::new();
+    let num_bins = 20;
+    let mut bins: Vec<usize> = vec![0; num_bins];
+    let mut min_weight = f64::INFINITY;
+    let mut max_weight = f64::NEG_INFINITY;
 
     for line in input.lines() {
         let parts: Vec<&str> = line.split_whitespace().collect();
@@ -994,6 +1048,12 @@ fn parse_input(
             let weight: f64 = parts[2]
                 .parse()
                 .unwrap_or_else(|_| panic!("Invalid weight value: {}", parts[2]));
+            if weight > max_weight {
+                max_weight = weight;
+            }
+            if weight < min_weight {
+                min_weight = weight;
+            }
             edges.push((node1, node2, weight));
         } else if parts.len() >= 2 {
             for i in 0..parts.len() {
@@ -1005,6 +1065,8 @@ fn parse_input(
             }
         }
     }
+
+    let bin_width = (max_weight - min_weight) / num_bins as f64;
 
     let mut graph = graph_ref.lock().unwrap();
     let mut positions = positions_ref.lock().unwrap();
@@ -1030,12 +1092,28 @@ fn parse_input(
 
     // Second pass: create all edges
     for (node1, node2, weight) in edges {
+        let bin_index = ((weight - min_weight) / bin_width).floor() as usize;
+        let bin_index = if bin_index >= num_bins {
+            num_bins - 1 // Clamp the last bin
+        } else {
+            bin_index
+        };
+
+        bins[bin_index] += 1;
+
         let node1_index = node_indices[&node1];
         let node2_index = node_indices[&node2];
         // Only add edge if it doesn't already exist
         if !graph.contains_edge(node1_index, node2_index) {
             graph.add_edge(node1_index, node2_index, weight);
         }
+    }
+    if weighted {
+        let mut histogram = histograph_ref.lock().unwrap();
+        histogram.bin_width = bin_width;
+        histogram.min = min_weight;
+        histogram.max = max_weight;
+        histogram.bins = bins;
     }
 }
 
@@ -1048,6 +1126,7 @@ fn main() -> Result<(), eframe::Error> {
     };
     let graph_ref = graph_app.graph_data.clone();
     let positions_ref = graph_app.positions.clone();
+    let histogram_ref = graph_app.weight_histogram.clone();
 
     thread::spawn(move || {
         let input = if !atty::is(Stream::Stdin) {
@@ -1065,7 +1144,13 @@ fn main() -> Result<(), eframe::Error> {
                 .filter_map(Result::ok)
                 .collect::<Vec<String>>()
                 .join("\n");
-            parse_input(&graph_ref, &positions_ref, &content, args.weighted);
+            parse_input(
+                &graph_ref,
+                &positions_ref,
+                &histogram_ref,
+                &content,
+                args.weighted,
+            );
         } else {
             if !Path::new(&input).exists() {
                 panic!("File does not exist");
@@ -1077,7 +1162,13 @@ fn main() -> Result<(), eframe::Error> {
                 .filter_map(Result::ok)
                 .collect::<Vec<String>>()
                 .join("\n");
-            parse_input(&graph_ref, &positions_ref, &content, args.weighted);
+            parse_input(
+                &graph_ref,
+                &positions_ref,
+                &histogram_ref,
+                &content,
+                args.weighted,
+            );
         }
     });
 
