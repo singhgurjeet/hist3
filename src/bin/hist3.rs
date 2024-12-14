@@ -196,21 +196,21 @@ impl eframe::App for PlotApp {
                         plot_ui.vline(
                             egui_plot::VLine::new(x)
                                 .color(egui::Color32::LIGHT_BLUE)
-                                .name("25th percentile"),
+                                .name(format!("25 ptile: {:.4}", x)),
                         );
                     }
                     if let Some((_, x)) = self.p_50 {
                         plot_ui.vline(
                             egui_plot::VLine::new(x)
                                 .color(egui::Color32::LIGHT_GREEN)
-                                .name("50th percentile"),
+                                .name(format!("50 ptile: {:.4}", x)),
                         );
                     }
                     if let Some((_, x)) = self.p_75 {
                         plot_ui.vline(
                             egui_plot::VLine::new(x)
                                 .color(egui::Color32::LIGHT_RED)
-                                .name("75th percentile"),
+                                .name(format!("75 ptile: {:.4}", x)),
                         );
                     }
                 });
