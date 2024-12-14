@@ -134,6 +134,15 @@ impl eframe::App for PlotApp {
         } else {
             1.0
         };
+        let min_x = self.data.first().unwrap().0.parse::<f64>().unwrap_or(0.0);
+        let max_x = self
+            .data
+            .last()
+            .unwrap()
+            .0
+            .parse::<f64>()
+            .unwrap_or(self.data.len() as f64);
+        let max_y = *self.data.iter().map(|(_, c)| c).max().unwrap() as f64;
         let chart = BarChart::new(
             self.data
                 .iter()
@@ -175,6 +184,10 @@ impl eframe::App for PlotApp {
                 })
                 .show(ui, |plot_ui| {
                     if let Some(pointer) = plot_ui.pointer_coordinate() {
+                        let pointer = egui_plot::PlotPoint {
+                            x: pointer.x.clamp(min_x, max_x),
+                            y: pointer.y.clamp(0.0, max_y),
+                        };
                         if plot_ui.ctx().input(|i| i.pointer.primary_pressed()) {
                             // Start drag
                             self.drag_start = Some(pointer);
