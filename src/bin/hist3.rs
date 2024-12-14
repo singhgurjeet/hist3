@@ -12,6 +12,16 @@ use std::iter::FromIterator;
 use std::ops::RangeInclusive;
 use std::path::Path;
 
+mod colors {
+    use eframe::egui::Color32;
+
+    pub const SELECTED_BAR_COLOR: Color32 = Color32::from_rgb(255, 165, 0);
+    pub const PERCENTILE_25_COLOR: Color32 = Color32::from_rgb(77, 77, 255); // Manually adjusted brighter and lighter blue
+    pub const PERCENTILE_50_COLOR: Color32 = Color32::from_rgb(77, 255, 77); // Manually adjusted brighter and lighter green
+    pub const PERCENTILE_75_COLOR: Color32 = Color32::from_rgb(255, 77, 77); // Manually adjusted brighter and lighter red
+    pub const DEFAULT_BAR_COLOR: Color32 = Color32::from_rgb(75, 75, 75); // Changed default bar color to a lighter gray
+}
+
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about)]
 struct Args {
@@ -152,13 +162,17 @@ impl eframe::App for PlotApp {
                         Bar::new(label.parse::<f64>().unwrap(), *count as f64)
                             .width(width)
                             .name(label)
+                            .fill(colors::DEFAULT_BAR_COLOR)
                     } else {
-                        Bar::new(i as f64, *count as f64).width(1.0).name(label)
+                        Bar::new(i as f64, *count as f64)
+                            .width(1.0)
+                            .name(label)
+                            .fill(colors::DEFAULT_BAR_COLOR)
                     };
 
                     if let Some(range) = &self.selection {
                         if range.contains(&i) {
-                            bar = bar.fill(egui::Color32::from_rgb(255, 165, 0));
+                            bar = bar.fill(colors::SELECTED_BAR_COLOR);
                         }
                     }
                     bar
@@ -189,14 +203,11 @@ impl eframe::App for PlotApp {
                             y: pointer.y.clamp(0.0, max_y),
                         };
                         if plot_ui.ctx().input(|i| i.pointer.primary_pressed()) {
-                            // Start drag
                             self.drag_start = Some(pointer);
                             self.drag_end = Some(pointer);
                         } else if plot_ui.ctx().input(|i| i.pointer.primary_down()) {
-                            // Continue drag
                             self.drag_end = Some(pointer);
                         } else if plot_ui.ctx().input(|i| i.pointer.primary_released()) {
-                            // End drag and select bars
                             if let (Some(start), Some(end)) = (self.drag_start, self.drag_end) {
                                 let selected_bars: Vec<usize> = (0..self.data.len())
                                     .filter(|&i| self.is_bar_in_rect(i, &start, &end))
@@ -216,38 +227,37 @@ impl eframe::App for PlotApp {
                         }
                     }
 
-                    plot_ui.bar_chart(chart.width(width * 0.92));
+                    plot_ui.bar_chart(chart.width(width * 0.98));
 
-                    // Draw selection rectangle
                     if let (Some(start), Some(end)) = (self.drag_start, self.drag_end) {
-                        plot_ui.polygon(
-                            egui_plot::Polygon::new(egui_plot::PlotPoints::from_iter(vec![
+                        plot_ui.polygon(egui_plot::Polygon::new(egui_plot::PlotPoints::from_iter(
+                            vec![
                                 [start.x, start.y],
                                 [end.x, start.y],
                                 [end.x, end.y],
                                 [start.x, end.y],
-                            ])), // .fill_color(egui::Color32::WHITE),
-                        );
+                            ],
+                        )));
                     }
 
                     if let Some((_, x)) = self.p_25 {
                         plot_ui.vline(
                             egui_plot::VLine::new(x)
-                                .color(egui::Color32::LIGHT_BLUE)
+                                .color(colors::PERCENTILE_25_COLOR)
                                 .name(format!("25 ptile: {:.4}", x)),
                         );
                     }
                     if let Some((_, x)) = self.p_50 {
                         plot_ui.vline(
                             egui_plot::VLine::new(x)
-                                .color(egui::Color32::LIGHT_GREEN)
+                                .color(colors::PERCENTILE_50_COLOR)
                                 .name(format!("50 ptile: {:.4}", x)),
                         );
                     }
                     if let Some((_, x)) = self.p_75 {
                         plot_ui.vline(
                             egui_plot::VLine::new(x)
-                                .color(egui::Color32::LIGHT_RED)
+                                .color(colors::PERCENTILE_75_COLOR)
                                 .name(format!("75 ptile: {:.4}", x)),
                         );
                     }
