@@ -8,6 +8,7 @@ use eframe::egui;
 use egui_plot::{Bar, BarChart, Legend, Plot};
 use hist3::data;
 use hist3::data::InputSource;
+use std::iter::FromIterator;
 use std::ops::RangeInclusive;
 use std::path::Path;
 
@@ -72,6 +73,8 @@ struct PlotApp {
     grid: bool,
     axes: bool,
     selection: Option<RangeInclusive<usize>>,
+    drag_start: Option<egui_plot::PlotPoint>,
+    drag_end: Option<egui_plot::PlotPoint>,
 }
 
 impl PlotApp {
@@ -95,7 +98,32 @@ impl PlotApp {
             grid: true,
             axes: true,
             selection: None,
+            drag_start: None,
+            drag_end: None,
         }
+    }
+
+    fn is_bar_in_rect(
+        &self,
+        bar_idx: usize,
+        start: &egui_plot::PlotPoint,
+        end: &egui_plot::PlotPoint,
+    ) -> bool {
+        let bar_x = if self.p_25.is_some() {
+            self.data[bar_idx].0.parse::<f64>().unwrap()
+        } else {
+            bar_idx as f64
+        };
+        let bar_y = self.data[bar_idx].1 as f64;
+
+        let x_min = start.x.min(end.x);
+        let x_max = start.x.max(end.x);
+        let y_min = start.y.min(end.y);
+        let y_max = start.y.max(end.y);
+
+        bar_x >= x_min
+            && bar_x <= x_max
+            && ((bar_y >= y_min && bar_y <= y_max) || (y_min > 0.0 && bar_y >= y_max))
     }
 }
 
@@ -147,50 +175,47 @@ impl eframe::App for PlotApp {
                 })
                 .show(ui, |plot_ui| {
                     if let Some(pointer) = plot_ui.pointer_coordinate() {
-                        if plot_ui.ctx().input(|i| i.pointer.primary_clicked()) {
-                            let bar_index = if self.p_25.is_some() {
-                                let value = pointer.x;
-                                let bin_width = self.range / self.num_bins as f64;
-                                (value / bin_width).floor() as usize
-                            } else {
-                                pointer.x.floor() as usize
-                            };
-
-                            if bar_index < self.data.len() {
-                                if let Some(range) = &self.selection {
-                                    if range.contains(&bar_index) {
-                                        self.selection = None;
-                                    } else {
-                                        self.selection = Some(bar_index..=bar_index);
-                                    }
-                                } else {
-                                    self.selection = Some(bar_index..=bar_index);
-                                }
-                            } else {
-                                self.selection = None;
-                            }
+                        if plot_ui.ctx().input(|i| i.pointer.primary_pressed()) {
+                            // Start drag
+                            self.drag_start = Some(pointer);
+                            self.drag_end = Some(pointer);
                         } else if plot_ui.ctx().input(|i| i.pointer.primary_down()) {
-                            if let Some(range) = &mut self.selection {
-                                let current_bar = if self.p_25.is_some() {
-                                    let value = pointer.x;
-                                    let bin_width = self.range / self.num_bins as f64;
-                                    (value / bin_width).floor() as usize
-                                } else {
-                                    pointer.x.floor() as usize
-                                };
+                            // Continue drag
+                            self.drag_end = Some(pointer);
+                        } else if plot_ui.ctx().input(|i| i.pointer.primary_released()) {
+                            // End drag and select bars
+                            if let (Some(start), Some(end)) = (self.drag_start, self.drag_end) {
+                                let selected_bars: Vec<usize> = (0..self.data.len())
+                                    .filter(|&i| self.is_bar_in_rect(i, &start, &end))
+                                    .collect();
 
-                                if current_bar < self.data.len() {
-                                    let start = *range.start();
-                                    *range = if current_bar < start {
-                                        current_bar..=start
-                                    } else {
-                                        start..=current_bar
-                                    };
+                                if !selected_bars.is_empty() {
+                                    self.selection = Some(
+                                        *selected_bars.first().unwrap()
+                                            ..=*selected_bars.last().unwrap(),
+                                    );
+                                } else {
+                                    self.selection = None;
                                 }
                             }
+                            self.drag_start = None;
+                            self.drag_end = None;
                         }
                     }
+
                     plot_ui.bar_chart(chart.width(width * 0.92));
+
+                    // Draw selection rectangle
+                    if let (Some(start), Some(end)) = (self.drag_start, self.drag_end) {
+                        plot_ui.polygon(
+                            egui_plot::Polygon::new(egui_plot::PlotPoints::from_iter(vec![
+                                [start.x, start.y],
+                                [end.x, start.y],
+                                [end.x, end.y],
+                                [start.x, end.y],
+                            ])), // .fill_color(egui::Color32::WHITE),
+                        );
+                    }
 
                     if let Some((_, x)) = self.p_25 {
                         plot_ui.vline(
