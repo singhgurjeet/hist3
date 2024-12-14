@@ -8,8 +8,8 @@ use eframe::egui;
 use egui_plot::{Bar, BarChart, Legend, Plot};
 use hist3::data;
 use hist3::data::InputSource;
+use std::collections::HashSet;
 use std::iter::FromIterator;
-use std::ops::RangeInclusive;
 use std::path::Path;
 
 mod colors {
@@ -82,7 +82,7 @@ struct PlotApp {
     num_bins: usize,
     grid: bool,
     axes: bool,
-    selection: Option<RangeInclusive<usize>>,
+    selection: Option<HashSet<usize>>,
     drag_start: Option<egui_plot::PlotPoint>,
     drag_end: Option<egui_plot::PlotPoint>,
 }
@@ -119,21 +119,27 @@ impl PlotApp {
         start: &egui_plot::PlotPoint,
         end: &egui_plot::PlotPoint,
     ) -> bool {
-        let bar_x = if self.p_25.is_some() {
-            self.data[bar_idx].0.parse::<f64>().unwrap()
-        } else {
-            bar_idx as f64
-        };
+        let bar_x = self.data[bar_idx]
+            .0
+            .parse::<f64>()
+            .unwrap_or(bar_idx as f64);
         let bar_y = self.data[bar_idx].1 as f64;
 
-        let x_min = start.x.min(end.x);
-        let x_max = start.x.max(end.x);
-        let y_min = start.y.min(end.y);
-        let y_max = start.y.max(end.y);
+        let width = self.range / self.num_bins as f64;
+        let half_width = width / 2.0;
 
-        bar_x >= x_min
-            && bar_x <= x_max
-            && ((bar_y >= y_min && bar_y <= y_max) || (y_min > 0.0 && bar_y >= y_max))
+        let rect_x_min = start.x.min(end.x);
+        let rect_x_max = start.x.max(end.x);
+        let rect_y_min = start.y.min(end.y);
+        let rect_y_max = start.y.max(end.y);
+
+        let bar_rect_x_min = bar_x - half_width;
+        let bar_rect_x_max = bar_x + half_width;
+
+        rect_x_max >= bar_rect_x_min
+            && rect_x_min <= bar_rect_x_max
+            && rect_y_max >= 0.0
+            && rect_y_min <= bar_y
     }
 }
 
@@ -170,8 +176,8 @@ impl eframe::App for PlotApp {
                             .fill(colors::DEFAULT_BAR_COLOR)
                     };
 
-                    if let Some(range) = &self.selection {
-                        if range.contains(&i) {
+                    if let Some(selected_indices) = &self.selection {
+                        if selected_indices.contains(&i) {
                             bar = bar.fill(colors::SELECTED_BAR_COLOR);
                         }
                     }
@@ -209,15 +215,12 @@ impl eframe::App for PlotApp {
                             self.drag_end = Some(pointer);
                         } else if plot_ui.ctx().input(|i| i.pointer.primary_released()) {
                             if let (Some(start), Some(end)) = (self.drag_start, self.drag_end) {
-                                let selected_bars: Vec<usize> = (0..self.data.len())
+                                let selected_bars: HashSet<usize> = (0..self.data.len())
                                     .filter(|&i| self.is_bar_in_rect(i, &start, &end))
                                     .collect();
 
                                 if !selected_bars.is_empty() {
-                                    self.selection = Some(
-                                        *selected_bars.first().unwrap()
-                                            ..=*selected_bars.last().unwrap(),
-                                    );
+                                    self.selection = Some(selected_bars);
                                 } else {
                                     self.selection = None;
                                 }
@@ -268,12 +271,12 @@ impl eframe::App for PlotApp {
             ui.horizontal(|ui| {
                 ui.label(format!("Total Points: {} |", self.total as usize));
 
-                if let Some(range) = &self.selection {
+                if let Some(selected_indices) = &self.selection {
                     let selected_data: Vec<_> = self
                         .data
                         .iter()
                         .enumerate()
-                        .filter(|(i, _)| range.contains(i))
+                        .filter(|(i, _)| selected_indices.contains(i))
                         .map(|(_, (_, count))| *count)
                         .collect();
 
