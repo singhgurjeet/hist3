@@ -61,7 +61,7 @@ fn main() -> Result<(), eframe::Error> {
     let (labels_and_counts, p_25, p_50, p_75, total, range) =
         data::compute_histogram(args.bins, input, args.categorical);
 
-    let plot = PlotApp::new(labels_and_counts, p_25, p_50, p_75, total, range, args.bins);
+    let plot = HistApp::new(labels_and_counts, p_25, p_50, p_75, total, range, args.bins);
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -72,7 +72,7 @@ fn main() -> Result<(), eframe::Error> {
     eframe::run_native(title.as_str(), options, Box::new(|_| Ok(Box::new(plot))))
 }
 
-struct PlotApp {
+struct HistApp {
     data: Vec<(String, usize)>,
     p_25: Option<(f64, f64)>,
     p_50: Option<(f64, f64)>,
@@ -87,7 +87,7 @@ struct PlotApp {
     drag_end: Option<egui_plot::PlotPoint>,
 }
 
-impl PlotApp {
+impl HistApp {
     fn new(
         data: Vec<(String, usize)>,
         p_25: Option<(f64, f64)>,
@@ -97,7 +97,7 @@ impl PlotApp {
         range: f64,
         num_bins: usize,
     ) -> Self {
-        PlotApp {
+        HistApp {
             data,
             p_25,
             p_50,
@@ -143,7 +143,7 @@ impl PlotApp {
     }
 }
 
-impl eframe::App for PlotApp {
+impl eframe::App for HistApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let width = if self.p_25.is_some() {
             self.range / self.num_bins as f64

@@ -30,7 +30,7 @@ fn main() -> Result<(), eframe::Error> {
     let args = Args::parse();
     let title = args.title.clone();
 
-    let plot = PlotApp::default().set_grid(true).set_axes(true);
+    let plot = ScatterApp::default().set_grid(true).set_axes(true);
     let data_ref = plot.data.clone();
 
     thread::spawn(move || {
@@ -86,13 +86,13 @@ fn process_line(data_ref: &Arc<Mutex<Vec<[f64; 2]>>>, line: &String) {
     }
 }
 
-struct PlotApp {
+struct ScatterApp {
     data: Arc<Mutex<Vec<[f64; 2]>>>,
     grid: bool,
     axes: bool,
 }
 
-impl Default for PlotApp {
+impl Default for ScatterApp {
     fn default() -> Self {
         Self {
             data: Arc::new(Mutex::new(Vec::new())),
@@ -102,7 +102,7 @@ impl Default for PlotApp {
     }
 }
 
-impl PlotApp {
+impl ScatterApp {
     fn set_grid(mut self, grid: bool) -> Self {
         self.grid = grid;
         self
@@ -114,7 +114,7 @@ impl PlotApp {
     }
 }
 
-impl eframe::App for PlotApp {
+impl eframe::App for ScatterApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             let mut plot = Plot::new("")
