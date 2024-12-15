@@ -9,6 +9,7 @@ use egui::Color32;
 use egui_plot::{CoordinatesFormatter, Corner, Plot, Points};
 use hist3::data::InputSource;
 use hist3::NUMERIC_REGEX;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;
@@ -108,6 +109,8 @@ struct XApp {
     y_col: usize,
     color_col: Option<usize>,
     size_col: Option<usize>,
+    color_cache: HashMap<usize, Vec<Color32>>,
+    size_cache: HashMap<usize, Vec<f64>>,
 }
 
 impl Default for XApp {
@@ -118,6 +121,8 @@ impl Default for XApp {
             y_col: 1,
             color_col: None,
             size_col: None,
+            color_cache: HashMap::new(),
+            size_cache: HashMap::new(),
         }
     }
 }
@@ -126,9 +131,29 @@ impl eframe::App for XApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.show_side_panel(ctx);
 
-        let color_array = self.generate_color_array();
-        let size_array = self.generate_size_array();
+        if self.color_col.is_some() && !self.color_cache.contains_key(&self.color_col.unwrap()) {
+            let color_array = self.generate_color_array();
+            self.color_cache
+                .insert(self.color_col.unwrap(), color_array);
+        }
+
+        if self.size_col.is_some() && !self.size_cache.contains_key(&self.size_col.unwrap()) {
+            let size_array = self.generate_size_array();
+            self.size_cache.insert(self.size_col.unwrap(), size_array);
+        }
+
         let plot_data = self.collect_plot_data();
+
+        let color_array = self
+            .color_col
+            .and_then(|col| self.color_cache.get(&col))
+            .cloned()
+            .unwrap_or_default();
+        let size_array = self
+            .size_col
+            .and_then(|col| self.size_cache.get(&col))
+            .cloned()
+            .unwrap_or_default();
 
         self.show_central_panel(ctx, &plot_data, &color_array, &size_array);
     }
@@ -154,10 +179,19 @@ impl XApp {
             self.create_combo_box(ui, "Color Column", &mut color_col, &col_items);
             self.create_combo_box(ui, "Size Column", &mut size_col, &col_items);
 
+            if color_col != self.color_col {
+                self.color_col = color_col;
+                self.color_cache
+                    .remove(&self.color_col.unwrap_or(usize::MAX));
+            }
+
+            if size_col != self.size_col {
+                self.size_col = size_col;
+                self.size_cache.remove(&self.size_col.unwrap_or(usize::MAX));
+            }
+
             self.x_col = x_col.unwrap_or(0);
             self.y_col = y_col.unwrap_or(1);
-            self.color_col = color_col;
-            self.size_col = size_col;
         });
     }
 
@@ -203,9 +237,15 @@ impl XApp {
                 .cloned()
                 .collect::<Vec<_>>();
 
-            let min_value = values.iter().cloned().fold(f64::INFINITY, f64::min);
-            let max_value = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+            let min_value = values.iter().fold(f64::INFINITY, |min, &val| min.min(val));
+            let max_value = values
+                .iter()
+                .fold(f64::NEG_INFINITY, |max, &val| max.max(val));
             let range = max_value - min_value;
+
+            if range == 0.0 {
+                return values.iter().map(|_| mapper(1.0)).collect();
+            }
 
             values
                 .iter()
