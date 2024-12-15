@@ -7,7 +7,7 @@ use clap::Parser;
 use eframe::egui;
 use egui_plot::{CoordinatesFormatter, Corner, Legend, Plot, Points};
 use hist3::data::InputSource;
-use hist3::NUMRE;
+use hist3::NUMERIC_REGEX;
 use std::fs::File;
 use std::io::BufRead;
 use std::path::Path;
@@ -76,7 +76,7 @@ fn main() -> Result<(), eframe::Error> {
 }
 
 fn process_line(data_ref: &Arc<Mutex<Vec<[f64; 2]>>>, line: &String) {
-    let floats = NUMRE
+    let floats = NUMERIC_REGEX
         .captures_iter(&line)
         .map(|cap| f64::from_str(&cap[0]).unwrap())
         .collect::<Vec<_>>();

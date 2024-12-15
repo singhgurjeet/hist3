@@ -34,7 +34,6 @@ mod colors {
         pub const NODE_NEIGHBOR: Color32 = Color32::from_rgb(255, 89, 94); // Wild mushroom red
         pub const STROKE_DEFAULT: Color32 = Color32::from_rgb(240, 250, 240); // Bright moss
         pub const EDGE: Color32 = Color32::from_rgb(140, 140, 140); // Neutral grey
-        pub const HISTOGRAM_BAR: Color32 = Color32::from_rgb(76, 175, 80); // Fresh pine green
     }
 
     // Mountain Lake High Contrast
@@ -46,7 +45,6 @@ mod colors {
         pub const NODE_NEIGHBOR: Color32 = Color32::from_rgb(255, 117, 143); // Alpine rose
         pub const STROKE_DEFAULT: Color32 = Color32::from_rgb(235, 245, 255); // Snow white
         pub const EDGE: Color32 = Color32::from_rgb(150, 150, 150); // Neutral grey
-        pub const HISTOGRAM_BAR: Color32 = Color32::from_rgb(0, 143, 204); // Clear lake blue
     }
 }
 
@@ -96,13 +94,6 @@ impl ColorTheme {
         match self {
             ColorTheme::ForestBold => colors::forest_bold::EDGE,
             ColorTheme::MountainBold => colors::mountain_bold::EDGE,
-        }
-    }
-
-    fn histogram_bar_color(&self) -> Color32 {
-        match self {
-            ColorTheme::ForestBold => colors::forest_bold::HISTOGRAM_BAR,
-            ColorTheme::MountainBold => colors::mountain_bold::HISTOGRAM_BAR,
         }
     }
 }
