@@ -124,6 +124,18 @@ impl Default for XApp {
 
 impl eframe::App for XApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.show_side_panel(ctx);
+
+        let color_array = self.generate_color_array();
+        let size_array = self.generate_size_array();
+        let plot_data = self.collect_plot_data();
+
+        self.show_central_panel(ctx, &plot_data, &color_array, &size_array);
+    }
+}
+
+impl XApp {
+    fn show_side_panel(&mut self, ctx: &egui::Context) {
         egui::SidePanel::left("left_panel").show(ctx, |ui| {
             let column_count = {
                 let data = self.data.lock().unwrap();
@@ -132,54 +144,62 @@ impl eframe::App for XApp {
 
             let col_items = (0..column_count).map(|i| i.to_string()).collect::<Vec<_>>();
 
-            egui::ComboBox::from_label("X Column")
-                .selected_text(self.x_col.to_string())
-                .show_ui(ui, |ui| {
-                    for (i, item) in col_items.iter().enumerate() {
-                        ui.selectable_value(&mut self.x_col, i, item);
-                    }
-                });
+            let mut x_col = Some(self.x_col);
+            let mut y_col = Some(self.y_col);
+            let mut color_col = self.color_col;
+            let mut size_col = self.size_col;
 
-            egui::ComboBox::from_label("Y Column")
-                .selected_text(self.y_col.to_string())
-                .show_ui(ui, |ui| {
-                    for (i, item) in col_items.iter().enumerate() {
-                        ui.selectable_value(&mut self.y_col, i, item);
-                    }
-                });
+            self.create_combo_box(ui, "X Column", &mut x_col, &col_items);
+            self.create_combo_box(ui, "Y Column", &mut y_col, &col_items);
+            self.create_combo_box(ui, "Color Column", &mut color_col, &col_items);
+            self.create_combo_box(ui, "Size Column", &mut size_col, &col_items);
 
-            egui::ComboBox::from_label("Color Column")
-                .selected_text(self.color_col.map_or("None".into(), |col| col.to_string()))
-                .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut self.color_col, None, "None");
-                    for (i, item) in col_items.iter().enumerate() {
-                        ui.selectable_value(&mut self.color_col, Some(i), item);
-                    }
-                });
-
-            egui::ComboBox::from_label("Size Column")
-                .selected_text(self.size_col.map_or("None".into(), |col| col.to_string()))
-                .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut self.size_col, None, "None");
-                    for (i, item) in col_items.iter().enumerate() {
-                        ui.selectable_value(&mut self.size_col, Some(i), item);
-                    }
-                });
+            self.x_col = x_col.unwrap_or(0);
+            self.y_col = y_col.unwrap_or(1);
+            self.color_col = color_col;
+            self.size_col = size_col;
         });
+    }
 
-        let simple_gradient = |value: f64| -> Color32 {
-            let norm = value.max(0.0).min(1.0);
-            let r = (0.0 + 255.0 * (1.0 - norm)).round() as u8;
-            let g = (norm * 128.0).round() as u8;
-            let b = (255.0 * norm).round() as u8;
+    fn create_combo_box(
+        &mut self,
+        ui: &mut egui::Ui,
+        label: &str,
+        column: &mut Option<usize>,
+        col_items: &[String],
+    ) {
+        egui::ComboBox::from_label(label)
+            .selected_text(column.map_or("None".into(), |col| col.to_string()))
+            .show_ui(ui, |ui| {
+                ui.selectable_value(column, None, "None");
+                for (i, item) in col_items.iter().enumerate() {
+                    ui.selectable_value(column, Some(i), item);
+                }
+            });
+    }
+
+    fn generate_color_array(&self) -> Vec<Color32> {
+        self.generate_visual_array(self.color_col, |norm_value| {
+            let r = (0.0 + 255.0 * (1.0 - norm_value)).round() as u8;
+            let g = (norm_value * 128.0).round() as u8;
+            let b = (255.0 * norm_value).round() as u8;
             Color32::from_rgb(r, g, b)
-        };
+        })
+    }
 
-        let color_array = if let Some(color_col) = self.color_col {
+    fn generate_size_array(&self) -> Vec<f64> {
+        self.generate_visual_array(self.size_col, |norm_value| 1.0 + 5.0 * norm_value)
+    }
+
+    fn generate_visual_array<F, Output>(&self, column: Option<usize>, mapper: F) -> Vec<Output>
+    where
+        F: Fn(f64) -> Output,
+    {
+        if let Some(col) = column {
             let data = self.data.lock().unwrap();
             let values = data
                 .iter()
-                .filter_map(|row| row.get(color_col))
+                .filter_map(|row| row.get(col))
                 .cloned()
                 .collect::<Vec<_>>();
 
@@ -190,66 +210,51 @@ impl eframe::App for XApp {
             values
                 .iter()
                 .map(|&val| {
-                    let norm_value = (val - min_value) / range; // Normalize to 0.0 - 1.0
-                    simple_gradient(norm_value)
+                    let norm_value = (val - min_value) / range;
+                    mapper(norm_value)
                 })
-                .collect::<Vec<_>>()
+                .collect()
         } else {
             Vec::new()
-        };
+        }
+    }
 
-        let size_array = if let Some(size_col) = self.size_col {
-            let data = self.data.lock().unwrap();
-            let values = data
-                .iter()
-                .filter_map(|row| row.get(size_col))
-                .cloned()
-                .collect::<Vec<_>>();
+    fn collect_plot_data(&self) -> Vec<([f64; 2], Option<f64>, Option<f64>)> {
+        let data = self.data.lock().unwrap();
+        data.iter()
+            .filter_map(|row| {
+                if row.len() > self.x_col && row.len() > self.y_col {
+                    let color = self.color_col.and_then(|c| row.get(c)).cloned();
+                    let size = self.size_col.and_then(|s| row.get(s)).cloned();
+                    Some(([row[self.x_col], row[self.y_col]], color, size))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
 
-            let min_value = values.iter().cloned().fold(f64::INFINITY, f64::min);
-            let max_value = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-            let range = max_value - min_value;
-
-            values
-                .iter()
-                .map(|&val| {
-                    let norm_value = (val - min_value) / range; // Normalize to 0.0 - 1.0
-                    1.0 + 9.0 * norm_value // Scale to 1.0 - 10.0
-                })
-                .collect::<Vec<_>>()
-        } else {
-            Vec::new()
-        };
-
-        let plot_data = {
-            let data = self.data.lock().unwrap();
-            data.iter()
-                .filter_map(|row| {
-                    if row.len() > self.x_col && row.len() > self.y_col {
-                        let color = self.color_col.and_then(|c| row.get(c)).cloned();
-                        let size = self.size_col.and_then(|s| row.get(s)).cloned();
-                        Some(([row[self.x_col], row[self.y_col]], color, size))
-                    } else {
-                        None
-                    }
-                })
-                .collect::<Vec<([f64; 2], Option<f64>, Option<f64>)>>()
-        };
-
+    fn show_central_panel(
+        &self,
+        ctx: &egui::Context,
+        plot_data: &Vec<([f64; 2], Option<f64>, Option<f64>)>,
+        color_array: &Vec<Color32>,
+        size_array: &Vec<f64>,
+    ) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            let mut plot = Plot::new("")
+            let plot = Plot::new("")
                 .allow_boxed_zoom(true)
                 .allow_drag(false)
                 .show_grid(true)
-                .show_axes(true);
+                .show_axes(true)
+                .coordinates_formatter(Corner::LeftBottom, CoordinatesFormatter::default());
 
-            plot = plot.coordinates_formatter(Corner::LeftBottom, CoordinatesFormatter::default());
             plot.show(ui, |plot_ui| {
                 for (i, (pos, _, size_val)) in plot_data.iter().enumerate() {
                     let color = if !color_array.is_empty() {
                         color_array[i]
                     } else {
-                        Color32::WHITE
+                        Color32::GRAY
                     };
                     let size = size_val.map_or(2.0, |_| size_array.get(i).cloned().unwrap_or(2.0));
 
