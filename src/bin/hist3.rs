@@ -16,10 +16,10 @@ mod colors {
     use eframe::egui::Color32;
 
     pub const SELECTED_BAR_COLOR: Color32 = Color32::from_rgb(255, 165, 0);
-    pub const PERCENTILE_25_COLOR: Color32 = Color32::from_rgb(77, 77, 255); // Manually adjusted brighter and lighter blue
-    pub const PERCENTILE_50_COLOR: Color32 = Color32::from_rgb(77, 255, 77); // Manually adjusted brighter and lighter green
-    pub const PERCENTILE_75_COLOR: Color32 = Color32::from_rgb(255, 77, 77); // Manually adjusted brighter and lighter red
-    pub const DEFAULT_BAR_COLOR: Color32 = Color32::from_rgb(75, 75, 75); // Changed default bar color to a lighter gray
+    pub const PERCENTILE_25_COLOR: Color32 = Color32::from_rgb(77, 77, 255);
+    pub const PERCENTILE_50_COLOR: Color32 = Color32::from_rgb(77, 255, 77);
+    pub const PERCENTILE_75_COLOR: Color32 = Color32::from_rgb(255, 77, 77);
+    pub const DEFAULT_BAR_COLOR: Color32 = Color32::from_rgb(75, 75, 75);
 }
 
 #[derive(clap::Parser, Debug)]
