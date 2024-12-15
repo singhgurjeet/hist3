@@ -5,6 +5,7 @@ extern crate egui_plot;
 use atty::Stream;
 use clap::Parser;
 use eframe::egui;
+use egui::Color32;
 use egui_plot::{CoordinatesFormatter, Corner, Plot, Points};
 use hist3::data::InputSource;
 use hist3::NUMERIC_REGEX;
@@ -30,7 +31,7 @@ fn main() -> Result<(), eframe::Error> {
     let args = Args::parse();
     let title = args.title.clone();
 
-    let plot = XApp::default().with_settings(true);
+    let plot = XApp::default();
     let data_ref = plot.data.clone();
 
     thread::spawn(move || {
@@ -39,7 +40,10 @@ fn main() -> Result<(), eframe::Error> {
     });
 
     let options = eframe::NativeOptions {
-        ..Default::default() // Correcting settings by just using default options
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([1024.0, 600.0]) // Wider default window
+            .with_min_inner_size([400.0, 300.0]), // Set minimum size
+        ..Default::default()
     };
     eframe::run_native(title.as_str(), options, Box::new(|_| Ok(Box::new(plot))))
 }
@@ -100,46 +104,38 @@ fn process_reader<R: BufRead>(reader: R, data_ref: &Arc<Mutex<Vec<Vec<f64>>>>) {
 
 struct XApp {
     data: Arc<Mutex<Vec<Vec<f64>>>>,
-    grid: bool,
     x_col: usize,
     y_col: usize,
+    color_col: Option<usize>,
+    size_col: Option<usize>,
 }
 
 impl Default for XApp {
     fn default() -> Self {
         Self {
             data: Arc::new(Mutex::new(Vec::new())),
-            grid: false,
             x_col: 0,
             y_col: 1,
+            color_col: None,
+            size_col: None,
         }
-    }
-}
-
-impl XApp {
-    fn with_settings(mut self, grid: bool) -> Self {
-        self.grid = grid;
-        self
     }
 }
 
 impl eframe::App for XApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::SidePanel::left("left_panel").show(ctx, |ui| {
-            ui.label("Select columns for X and Y axes:");
-
             let column_count = {
                 let data = self.data.lock().unwrap();
                 data.first().map_or(0, |row| row.len())
             };
 
-            let x_col_items = (0..column_count).map(|i| i.to_string()).collect::<Vec<_>>();
-            let y_col_items = (0..column_count).map(|i| i.to_string()).collect::<Vec<_>>();
+            let col_items = (0..column_count).map(|i| i.to_string()).collect::<Vec<_>>();
 
             egui::ComboBox::from_label("X Column")
                 .selected_text(self.x_col.to_string())
                 .show_ui(ui, |ui| {
-                    for (i, item) in x_col_items.iter().enumerate() {
+                    for (i, item) in col_items.iter().enumerate() {
                         ui.selectable_value(&mut self.x_col, i, item);
                     }
                 });
@@ -147,39 +143,119 @@ impl eframe::App for XApp {
             egui::ComboBox::from_label("Y Column")
                 .selected_text(self.y_col.to_string())
                 .show_ui(ui, |ui| {
-                    for (i, item) in y_col_items.iter().enumerate() {
+                    for (i, item) in col_items.iter().enumerate() {
                         ui.selectable_value(&mut self.y_col, i, item);
                     }
                 });
+
+            egui::ComboBox::from_label("Color Column")
+                .selected_text(self.color_col.map_or("None".into(), |col| col.to_string()))
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut self.color_col, None, "None");
+                    for (i, item) in col_items.iter().enumerate() {
+                        ui.selectable_value(&mut self.color_col, Some(i), item);
+                    }
+                });
+
+            egui::ComboBox::from_label("Size Column")
+                .selected_text(self.size_col.map_or("None".into(), |col| col.to_string()))
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut self.size_col, None, "None");
+                    for (i, item) in col_items.iter().enumerate() {
+                        ui.selectable_value(&mut self.size_col, Some(i), item);
+                    }
+                });
         });
+
+        let simple_gradient = |value: f64| -> Color32 {
+            let norm = value.max(0.0).min(1.0);
+            let r = (0.0 + 255.0 * (1.0 - norm)).round() as u8;
+            let g = (norm * 128.0).round() as u8;
+            let b = (255.0 * norm).round() as u8;
+            Color32::from_rgb(r, g, b)
+        };
+
+        let color_array = if let Some(color_col) = self.color_col {
+            let data = self.data.lock().unwrap();
+            let values = data
+                .iter()
+                .filter_map(|row| row.get(color_col))
+                .cloned()
+                .collect::<Vec<_>>();
+
+            let min_value = values.iter().cloned().fold(f64::INFINITY, f64::min);
+            let max_value = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+            let range = max_value - min_value;
+
+            values
+                .iter()
+                .map(|&val| {
+                    let norm_value = (val - min_value) / range; // Normalize to 0.0 - 1.0
+                    simple_gradient(norm_value)
+                })
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
+
+        let size_array = if let Some(size_col) = self.size_col {
+            let data = self.data.lock().unwrap();
+            let values = data
+                .iter()
+                .filter_map(|row| row.get(size_col))
+                .cloned()
+                .collect::<Vec<_>>();
+
+            let min_value = values.iter().cloned().fold(f64::INFINITY, f64::min);
+            let max_value = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+            let range = max_value - min_value;
+
+            values
+                .iter()
+                .map(|&val| {
+                    let norm_value = (val - min_value) / range; // Normalize to 0.0 - 1.0
+                    1.0 + 9.0 * norm_value // Scale to 1.0 - 10.0
+                })
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
 
         let plot_data = {
             let data = self.data.lock().unwrap();
             data.iter()
                 .filter_map(|row| {
                     if row.len() > self.x_col && row.len() > self.y_col {
-                        Some([row[self.x_col], row[self.y_col]])
+                        let color = self.color_col.and_then(|c| row.get(c)).cloned();
+                        let size = self.size_col.and_then(|s| row.get(s)).cloned();
+                        Some(([row[self.x_col], row[self.y_col]], color, size))
                     } else {
                         None
                     }
                 })
-                .collect::<Vec<[f64; 2]>>()
+                .collect::<Vec<([f64; 2], Option<f64>, Option<f64>)>>()
         };
 
         egui::CentralPanel::default().show(ctx, |ui| {
             let mut plot = Plot::new("")
                 .allow_boxed_zoom(true)
                 .allow_drag(false)
-                .show_grid(self.grid)
+                .show_grid(true)
                 .show_axes(true);
 
             plot = plot.coordinates_formatter(Corner::LeftBottom, CoordinatesFormatter::default());
             plot.show(ui, |plot_ui| {
-                plot_ui.points(
-                    Points::new(plot_data.clone())
-                        .radius(2.0)
-                        .color(egui::Color32::from_rgb(75, 75, 75)),
-                );
+                for (i, (pos, _, size_val)) in plot_data.iter().enumerate() {
+                    let color = if !color_array.is_empty() {
+                        color_array[i]
+                    } else {
+                        Color32::WHITE
+                    };
+                    let size = size_val.map_or(2.0, |_| size_array.get(i).cloned().unwrap_or(2.0));
+
+                    let points = Points::new(vec![*pos]).radius(size as f32).color(color);
+                    plot_ui.points(points);
+                }
             });
         });
     }

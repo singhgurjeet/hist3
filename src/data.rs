@@ -30,15 +30,6 @@ fn read_from_file(file_name: &String, max_num_lines: usize) -> Vec<String> {
     vals
 }
 
-fn is_mostly_strings(vals: &Vec<String>) -> bool {
-    vals.iter()
-        .filter(|x| x.len() > 0)
-        .map(|x| x.parse::<f64>())
-        .filter(|x| x.is_err())
-        .count()
-        > (vals.len() / 2)
-}
-
 fn histogram_from_categories(
     vals: &Vec<String>,
 ) -> (
