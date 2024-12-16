@@ -214,9 +214,9 @@ impl ScatterApp {
 
     fn generate_color_array(&self) -> Vec<Color32> {
         self.generate_visual_array(self.color_col, |norm_value| {
-            let r = (0.0 + 255.0 * (1.0 - norm_value)).round() as u8;
+            let r = (255.0 * norm_value).round() as u8;
             let g = (norm_value * 128.0).round() as u8;
-            let b = (255.0 * norm_value).round() as u8;
+            let b = (0.0 + 255.0 * (1.0 - norm_value)).round() as u8;
             Color32::from_rgb(r, g, b)
         })
     }
