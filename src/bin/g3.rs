@@ -512,6 +512,7 @@ impl eframe::App for GraphVisualizerApp {
                         Rect::from_two_pos(start, end),
                         0.0,
                         Stroke::new(1.0, Color32::WHITE),
+                        egui::StrokeKind::Middle,
                     );
                 }
             }
