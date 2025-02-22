@@ -111,6 +111,7 @@ struct ScatterApp {
     size_col: Option<usize>,
     color_cache: HashMap<usize, Vec<Color32>>,
     size_cache: HashMap<usize, Vec<f64>>,
+    filters: Vec<(f64, f64, f64, f64)>,
 }
 
 impl Default for ScatterApp {
@@ -123,12 +124,30 @@ impl Default for ScatterApp {
             size_col: None,
             color_cache: HashMap::new(),
             size_cache: HashMap::new(),
+            filters: Vec::new(),
         }
     }
 }
 
 impl eframe::App for ScatterApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if self.filters.len() != self.data.lock().unwrap().first().map_or(0, |row| row.len()) {
+            let data = self.data.lock().unwrap();
+            let columns = data.first().map_or(0, |row| row.len());
+
+            self.filters.clear();
+            for col in 0..columns {
+                let min = data
+                    .iter()
+                    .filter_map(|row| row.get(col))
+                    .fold(f64::INFINITY, |min, &val| min.min(val));
+                let max = data
+                    .iter()
+                    .filter_map(|row| row.get(col))
+                    .fold(f64::NEG_INFINITY, |max, &val| max.max(val));
+                self.filters.push((min, max, min, max));
+            }
+        }
         self.show_side_panel(ctx);
 
         if self.color_col.is_some() && !self.color_cache.contains_key(&self.color_col.unwrap()) {
@@ -192,6 +211,16 @@ impl ScatterApp {
 
             self.x_col = x_col.unwrap_or(0);
             self.y_col = y_col.unwrap_or(1);
+
+            ui.separator();
+            ui.heading("Filters");
+            for (i, filter) in self.filters.iter_mut().enumerate() {
+                ui.label(format!("Column {} Range", i));
+                let range = filter.0..=filter.1;
+                ui.add(egui::widgets::Slider::new(&mut filter.2, range.clone()).text("min"));
+                ui.add(egui::widgets::Slider::new(&mut filter.3, range).text("max"));
+                ui.separator();
+            }
         });
     }
 
@@ -263,6 +292,13 @@ impl ScatterApp {
         let data = self.data.lock().unwrap();
         data.iter()
             .filter_map(|row| {
+                if !row
+                    .iter()
+                    .enumerate()
+                    .all(|(i, val)| *val >= self.filters[i].2 && *val <= self.filters[i].3)
+                {
+                    return None;
+                }
                 if row.len() > self.x_col && row.len() > self.y_col {
                     let color = self.color_col.and_then(|c| row.get(c)).cloned();
                     let size = self.size_col.and_then(|s| row.get(s)).cloned();
