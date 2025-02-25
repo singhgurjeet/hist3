@@ -343,14 +343,6 @@ impl eframe::App for MainApp {
 
                     // This closure runs every frame for the viewport
                     egui::CentralPanel::default().show(ctx, |ui| {
-                        // Add a "Close" button at the top of the window
-                        if ui.button("Close Window").clicked() {
-                            *is_open_ref = false;
-                            // We don't need to close it externally - the app will close it
-                            // when it sees is_open_ref is false
-                            return;
-                        }
-
                         ui.add_space(10.0);
                         // Get filtered data references without cloning
                         let data = data_arc.lock().unwrap();
@@ -450,33 +442,6 @@ impl MainApp {
                 }
 
                 ui.add_space(10.0);
-
-                if !self.scatter_plots.is_empty() || !self.histograms.is_empty() {
-                    ui.separator();
-                    ui.heading("Active Plots");
-                    ui.add_space(5.0);
-
-                    for (i, (is_open, _)) in self.scatter_plots.iter().enumerate() {
-                        if *is_open {
-                            ui.horizontal(|ui| {
-                                ui.label(format!("• Scatter Plot {}", i + 1));
-                                ui.label("(in separate window)");
-                            });
-                        }
-                    }
-
-                    for (i, (is_open, _)) in self.histograms.iter().enumerate() {
-                        if *is_open {
-                            ui.horizontal(|ui| {
-                                ui.label(format!("• Histogram {}", i + 1));
-                                ui.label("(in separate window)");
-                            });
-                        }
-                    }
-
-                    ui.add_space(5.0);
-                    ui.label("Note: All plot windows update automatically with filter changes.");
-                }
             } else {
                 ui.horizontal_centered(|ui| {
                     ui.add(egui::Spinner::new());
