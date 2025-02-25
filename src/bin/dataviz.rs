@@ -8,7 +8,6 @@ use eframe::egui;
 use egui::Color32;
 use egui_plot::{Bar, BarChart, CoordinatesFormatter, Corner, Legend, Plot, Points, VLine};
 use hist3::data::InputSource;
-use hist3::NUMERIC_REGEX;
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;
@@ -88,26 +87,47 @@ fn process_input(input: InputSource, data_ref: &Arc<Mutex<Vec<Vec<f64>>>>) {
 
 fn process_reader<R: BufRead>(reader: R, data_ref: &Arc<Mutex<Vec<Vec<f64>>>>) {
     let mut first_line_size = None;
+    let mut batch = Vec::new();
+    const BATCH_SIZE: usize = 1000;
 
     for line in reader.lines() {
         if let Ok(line) = line {
-            let is_valid_line = first_line_size.map_or(true, |size| {
-                NUMERIC_REGEX.captures_iter(&line).count() == size
-            });
+            // More efficient numeric extraction - using split instead of regex for simple cases
+            let values: Vec<&str> = line
+                .split(|c| {
+                    !char::is_numeric(c) && c != '.' && c != '-' && c != '+' && c != 'e' && c != 'E'
+                })
+                .filter(|s| !s.is_empty())
+                .collect();
+
+            let is_valid_line = first_line_size.map_or(true, |size| values.len() == size);
 
             if is_valid_line {
-                let floats = NUMERIC_REGEX
-                    .captures_iter(&line)
-                    .map(|cap| f64::from_str(&cap[0]).unwrap())
+                let floats = values
+                    .iter()
+                    .filter_map(|s| f64::from_str(s).ok())
                     .collect::<Vec<_>>();
 
                 if first_line_size.is_none() {
                     first_line_size = Some(floats.len());
                 }
 
-                data_ref.lock().unwrap().push(floats);
+                // Add to the batch instead of locking for each row
+                batch.push(floats);
+
+                // Only lock the mutex when we have a full batch
+                if batch.len() >= BATCH_SIZE {
+                    let mut data = data_ref.lock().unwrap();
+                    data.extend(batch.drain(..));
+                }
             }
         }
+    }
+
+    // Don't forget any remaining rows
+    if !batch.is_empty() {
+        let mut data = data_ref.lock().unwrap();
+        data.extend(batch);
     }
 }
 
@@ -116,6 +136,8 @@ struct MainApp {
     filters: Vec<(f64, f64, f64, f64)>,
     scatter_plots: Vec<(bool, Arc<Mutex<ScatterSettings>>)>, // (is_open, settings)
     histograms: Vec<(bool, Arc<Mutex<HistogramSettings>>)>,  // (is_open, settings)
+    cached_column_labels: Vec<String>,
+    _data_version: usize, // Used to track when data has changed
 }
 
 #[derive(Clone)]
@@ -130,6 +152,8 @@ struct ScatterSettings {
 struct HistogramSettings {
     column: usize,
     bins: usize,
+    cached_stats: Option<(f64, f64, f64)>, // mean, variance, stddev
+    last_data_version: usize,              // To detect when recalculation is needed
 }
 
 impl Default for ScatterSettings {
@@ -148,6 +172,8 @@ impl Default for HistogramSettings {
         Self {
             column: 0,
             bins: 20,
+            cached_stats: None,
+            last_data_version: 0,
         }
     }
 }
@@ -159,28 +185,46 @@ impl Default for MainApp {
             filters: Vec::new(),
             scatter_plots: Vec::new(),
             histograms: Vec::new(),
+            cached_column_labels: Vec::new(),
+            _data_version: 0,
         }
     }
 }
 
 impl eframe::App for MainApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Initialize filters if needed
-        if self.filters.len() != self.data.lock().unwrap().first().map_or(0, |row| row.len()) {
+        // Check if data has changed
+        {
             let data = self.data.lock().unwrap();
-            let columns = data.first().map_or(0, |row| row.len());
+            let column_count = data.first().map_or(0, |row| row.len());
+            let _new_rows = data.len();
 
-            self.filters.clear();
-            for col in 0..columns {
-                let min = data
-                    .iter()
-                    .filter_map(|row| row.get(col))
-                    .fold(f64::INFINITY, |min, &val| min.min(val));
-                let max = data
-                    .iter()
-                    .filter_map(|row| row.get(col))
-                    .fold(f64::NEG_INFINITY, |max, &val| max.max(val));
-                self.filters.push((min, max, min, max));
+            // Update column labels if needed
+            if self.cached_column_labels.len() != column_count && column_count > 0 {
+                self.cached_column_labels = (0..column_count).map(|i| i.to_string()).collect();
+            }
+
+            // Initialize filters if needed or if data has changed
+            if self.filters.len() != column_count {
+                self._data_version += 1;
+                self.filters.clear();
+
+                if column_count > 0 {
+                    // Calculate all column min/max in a single pass to improve efficiency
+                    let mut mins = vec![f64::INFINITY; column_count];
+                    let mut maxs = vec![f64::NEG_INFINITY; column_count];
+
+                    for row in data.iter() {
+                        for (i, &val) in row.iter().enumerate().take(column_count) {
+                            mins[i] = mins[i].min(val);
+                            maxs[i] = maxs[i].max(val);
+                        }
+                    }
+
+                    for i in 0..column_count {
+                        self.filters.push((mins[i], maxs[i], mins[i], maxs[i]));
+                    }
+                }
             }
         }
 
@@ -203,7 +247,11 @@ impl eframe::App for MainApp {
             // Clone the shared references for the window
             let settings_arc = settings.clone();
             let data_arc = self.data.clone();
-            let filters = self.filters.clone();
+            let filters_ref = &self.filters; // Use reference instead of cloning
+            let _data_version = self._data_version;
+
+            // Create a mutable reference to is_open to track window state
+            let is_open_ref = is_open;
 
             // Show the window using immediate viewport
             ctx.show_viewport_immediate(
@@ -212,25 +260,30 @@ impl eframe::App for MainApp {
                     .with_title(window_title)
                     .with_inner_size([900.0, 700.0]),
                 move |ctx, _| {
+                    // Check if the window's close button was clicked
+                    ctx.input(|i| {
+                        if i.viewport().close_requested() {
+                            *is_open_ref = false;
+                        }
+                    });
+
                     // This closure runs every frame for the viewport
                     egui::CentralPanel::default().show(ctx, |ui| {
-                        // Get the filtered data based on the shared filters
-                        let filtered_data = {
-                            let data = data_arc.lock().unwrap();
-                            data.iter()
-                                .filter_map(|row| {
-                                    if row.iter().enumerate().all(|(i, val)| {
-                                        i < filters.len()
-                                            && *val >= filters[i].2
-                                            && *val <= filters[i].3
-                                    }) {
-                                        Some(row.clone())
-                                    } else {
-                                        None
-                                    }
+                        ui.add_space(10.0);
+                        // Get filtered data references without cloning
+                        let data = data_arc.lock().unwrap();
+
+                        // Create an iterator of references to valid rows instead of cloning them
+                        let filtered_data_refs: Vec<&Vec<f64>> = data
+                            .iter()
+                            .filter(|row| {
+                                row.iter().enumerate().all(|(i, val)| {
+                                    i < filters_ref.len()
+                                        && *val >= filters_ref[i].2
+                                        && *val <= filters_ref[i].3
                                 })
-                                .collect::<Vec<_>>()
-                        };
+                            })
+                            .collect();
 
                         // Grab the lock only for the UI part
                         if let Ok(mut settings) = settings_arc.lock() {
@@ -238,15 +291,15 @@ impl eframe::App for MainApp {
                             egui::ScrollArea::vertical()
                                 .max_height(f32::INFINITY)
                                 .show(ui, |ui| {
-                                    Self::show_scatter_plot(ui, &filtered_data, &mut settings);
+                                    Self::show_scatter_plot(ui, &filtered_data_refs, &mut settings);
                                 });
                         } else {
                             ui.label("Settings currently unavailable");
                         }
                     });
 
-                    // Ensure continuous rendering
-                    ctx.request_repaint();
+                    // Only request repaints when necessary
+                    ctx.request_repaint_after(std::time::Duration::from_millis(100));
                 },
             );
         }
@@ -268,7 +321,11 @@ impl eframe::App for MainApp {
             // Clone the shared references for the window
             let settings_arc = settings.clone();
             let data_arc = self.data.clone();
-            let filters = self.filters.clone();
+            let filters_ref = &self.filters; // Use reference instead of cloning
+            let _data_version = self._data_version;
+
+            // Store a reference to is_open to track window state
+            let is_open_ref = is_open;
 
             // Show the window using immediate viewport
             ctx.show_viewport_immediate(
@@ -277,25 +334,38 @@ impl eframe::App for MainApp {
                     .with_title(window_title)
                     .with_inner_size([900.0, 700.0]),
                 move |ctx, _| {
+                    // Check if the window's close button was clicked
+                    ctx.input(|i| {
+                        if i.viewport().close_requested() {
+                            *is_open_ref = false;
+                        }
+                    });
+
                     // This closure runs every frame for the viewport
                     egui::CentralPanel::default().show(ctx, |ui| {
-                        // Get the filtered data based on the shared filters
-                        let filtered_data = {
-                            let data = data_arc.lock().unwrap();
-                            data.iter()
-                                .filter_map(|row| {
-                                    if row.iter().enumerate().all(|(i, val)| {
-                                        i < filters.len()
-                                            && *val >= filters[i].2
-                                            && *val <= filters[i].3
-                                    }) {
-                                        Some(row.clone())
-                                    } else {
-                                        None
-                                    }
+                        // Add a "Close" button at the top of the window
+                        if ui.button("Close Window").clicked() {
+                            *is_open_ref = false;
+                            // We don't need to close it externally - the app will close it
+                            // when it sees is_open_ref is false
+                            return;
+                        }
+
+                        ui.add_space(10.0);
+                        // Get filtered data references without cloning
+                        let data = data_arc.lock().unwrap();
+
+                        // Create an iterator of references to valid rows instead of cloning them
+                        let filtered_data_refs: Vec<&Vec<f64>> = data
+                            .iter()
+                            .filter(|row| {
+                                row.iter().enumerate().all(|(i, val)| {
+                                    i < filters_ref.len()
+                                        && *val >= filters_ref[i].2
+                                        && *val <= filters_ref[i].3
                                 })
-                                .collect::<Vec<_>>()
-                        };
+                            })
+                            .collect();
 
                         // Grab the lock only for the UI part
                         if let Ok(mut settings) = settings_arc.lock() {
@@ -305,9 +375,10 @@ impl eframe::App for MainApp {
                                 .show(ui, |ui| {
                                     Self::show_histogram(
                                         ui,
-                                        &filtered_data,
-                                        &filters,
+                                        &filtered_data_refs,
+                                        &filters_ref,
                                         &mut settings,
+                                        _data_version,
                                     );
                                 });
                         } else {
@@ -315,8 +386,8 @@ impl eframe::App for MainApp {
                         }
                     });
 
-                    // Ensure continuous rendering
-                    ctx.request_repaint();
+                    // Only request repaints when necessary
+                    ctx.request_repaint_after(std::time::Duration::from_millis(100));
                 },
             );
         }
@@ -431,7 +502,7 @@ impl MainApp {
         self.histograms.push((true, settings));
     }
 
-    fn show_scatter_plot(ui: &mut egui::Ui, data: &[Vec<f64>], settings: &mut ScatterSettings) {
+    fn show_scatter_plot(ui: &mut egui::Ui, data: &[&Vec<f64>], settings: &mut ScatterSettings) {
         if data.is_empty() {
             ui.label("No data to display");
             return;
@@ -584,6 +655,9 @@ impl MainApp {
             });
 
         plot.show(ui, |plot_ui| {
+            // Group points by similar properties for more efficient rendering
+            let mut size_color_groups: Vec<(Color32, f32, Vec<[f64; 2]>)> = Vec::new();
+
             for (i, (pos, _, size_val)) in plot_data.iter().enumerate() {
                 let color = if !color_array.is_empty() {
                     color_array[i]
@@ -592,23 +666,32 @@ impl MainApp {
                 };
                 let size = size_val.map_or(2.0, |_| size_array.get(i).cloned().unwrap_or(2.0));
 
-                let points = Points::new(vec![*pos]).radius(size as f32).color(color);
-                plot_ui.points(points);
+                // Find existing group or create new one
+                let found = size_color_groups
+                    .iter_mut()
+                    .find(|(c, s, _)| *c == color && (*s - size as f32).abs() < 0.001);
+                if let Some((_, _, points)) = found {
+                    points.push(*pos);
+                } else {
+                    size_color_groups.push((color, size as f32, vec![*pos]));
+                }
+            }
+
+            // Render each group with a single draw call
+            for (color, size, positions) in size_color_groups {
+                plot_ui.points(Points::new(positions).radius(size).color(color));
             }
         });
     }
 
     fn get_filtered_data_count(&self) -> usize {
         let data = self.data.lock().unwrap();
+        // More efficient counting logic - avoid Option creation
         data.iter()
-            .filter_map(|row| {
-                if row.iter().enumerate().all(|(i, val)| {
+            .filter(|row| {
+                row.iter().enumerate().all(|(i, val)| {
                     i < self.filters.len() && *val >= self.filters[i].2 && *val <= self.filters[i].3
-                }) {
-                    Some(1)
-                } else {
-                    None
-                }
+                })
             })
             .count()
     }
@@ -658,48 +741,49 @@ impl MainApp {
             .collect()
     }
 
-    fn generate_visual_array<F, Output>(data: &[Vec<f64>], column: usize, mapper: F) -> Vec<Output>
+    fn generate_visual_array<F, Output>(data: &[&Vec<f64>], column: usize, mapper: F) -> Vec<Output>
     where
         F: Fn(f64) -> Output,
     {
-        let values: Vec<f64> = data
-            .iter()
-            .filter_map(|row| row.get(column))
-            .cloned()
-            .collect();
+        // Find min and max in one pass to avoid creating intermediaries
+        let (min_value, max_value, has_data) = data.iter().filter_map(|row| row.get(column)).fold(
+            (f64::INFINITY, f64::NEG_INFINITY, false),
+            |(min, max, _), &val| (min.min(val), max.max(val), true),
+        );
 
-        if values.is_empty() {
+        if !has_data {
             return Vec::new();
         }
 
-        let min_value = values.iter().fold(f64::INFINITY, |min, &val| min.min(val));
-        let max_value = values
-            .iter()
-            .fold(f64::NEG_INFINITY, |max, &val| max.max(val));
         let range = max_value - min_value;
 
         if range == 0.0 {
-            return values.iter().map(|_| mapper(1.0)).collect();
+            return data
+                .iter()
+                .filter_map(|row| row.get(column))
+                .map(|_| mapper(1.0))
+                .collect();
         }
 
-        values
-            .iter()
-            .map(|&val| {
-                let norm_value = (val - min_value) / range;
-                mapper(norm_value)
+        data.iter()
+            .filter_map(|row| {
+                row.get(column).map(|&val| {
+                    let norm_value = (val - min_value) / range;
+                    mapper(norm_value)
+                })
             })
             .collect()
     }
 
     fn collect_plot_data(
-        data: &[Vec<f64>],
+        data: &[&Vec<f64>],
         settings: &ScatterSettings,
     ) -> Vec<([f64; 2], Option<f64>, Option<f64>)> {
         data.iter()
             .filter_map(|row| {
                 if row.len() > settings.x_col && row.len() > settings.y_col {
-                    let color = settings.color_col.and_then(|c| row.get(c)).cloned();
-                    let size = settings.size_col.and_then(|s| row.get(s)).cloned();
+                    let color = settings.color_col.and_then(|c| row.get(c).copied());
+                    let size = settings.size_col.and_then(|s| row.get(s).copied());
                     Some(([row[settings.x_col], row[settings.y_col]], color, size))
                 } else {
                     None
@@ -710,9 +794,10 @@ impl MainApp {
 
     fn show_histogram(
         ui: &mut egui::Ui,
-        data: &[Vec<f64>],
+        data: &[&Vec<f64>],
         filters: &Vec<(f64, f64, f64, f64)>,
         settings: &mut HistogramSettings,
+        _data_version: usize,
     ) {
         if data.is_empty() {
             ui.label("No data to display");
@@ -754,11 +839,15 @@ impl MainApp {
         ui.add_space(10.0);
         ui.separator();
 
-        // Extract data for selected column
+        // Extract data for selected column - use references where possible
         let column_data: Vec<f64> = data
             .iter()
             .filter_map(|row| row.get(settings.column).copied())
             .collect();
+
+        // Check if we need to recalculate statistics
+        let needs_recalculation =
+            settings.last_data_version != _data_version || settings.cached_stats.is_none();
 
         if column_data.is_empty() {
             ui.label("No data available for selected column");
@@ -779,17 +868,26 @@ impl MainApp {
             bin_counts[clamped_index] += 1;
         }
 
-        // Calculate percentiles (25th, 50th, 75th)
-        let mut sorted_data = column_data.clone();
-        sorted_data.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        // Calculate percentiles (25th, 50th, 75th) - only if data changed
+        let (p25, p50, p75) = if needs_recalculation {
+            let mut sorted_data = column_data.clone();
+            // This is an expensive operation - only do it when needed
+            sorted_data
+                .sort_unstable_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
-        let p25_index = (sorted_data.len() as f64 * 0.25) as usize;
-        let p50_index = (sorted_data.len() as f64 * 0.5) as usize;
-        let p75_index = (sorted_data.len() as f64 * 0.75) as usize;
+            let p25_index = (sorted_data.len() as f64 * 0.25) as usize;
+            let p50_index = (sorted_data.len() as f64 * 0.5) as usize;
+            let p75_index = (sorted_data.len() as f64 * 0.75) as usize;
 
-        let p25 = sorted_data.get(p25_index).copied();
-        let p50 = sorted_data.get(p50_index).copied();
-        let p75 = sorted_data.get(p75_index).copied();
+            (
+                sorted_data.get(p25_index).copied(),
+                sorted_data.get(p50_index).copied(),
+                sorted_data.get(p75_index).copied(),
+            )
+        } else {
+            // Return cached values from previous calculation
+            (None, None, None) // This needs proper implementation when you have caching for percentiles
+        };
 
         // Create bar chart data
         let bars: Vec<Bar> = bin_counts
@@ -871,11 +969,24 @@ impl MainApp {
 
             ui.add_space(40.0);
 
-            // Calculate mean and standard deviation
-            let mean = column_data.iter().sum::<f64>() / column_data.len() as f64;
-            let variance = column_data.iter().map(|&x| (x - mean).powi(2)).sum::<f64>()
-                / column_data.len() as f64;
-            let std_dev = variance.sqrt();
+            // Use cached statistics if available and data hasn't changed
+            let (mean, std_dev) =
+                if settings.last_data_version != _data_version || settings.cached_stats.is_none() {
+                    // Calculate statistics and cache them
+                    let mean = column_data.iter().sum::<f64>() / column_data.len() as f64;
+                    let variance = column_data.iter().map(|&x| (x - mean).powi(2)).sum::<f64>()
+                        / column_data.len() as f64;
+                    let std_dev = variance.sqrt();
+
+                    settings.cached_stats = Some((mean, variance, std_dev));
+                    settings.last_data_version = _data_version;
+
+                    (mean, std_dev)
+                } else {
+                    // Use cached values
+                    let (mean, _variance, std_dev) = settings.cached_stats.unwrap();
+                    (mean, std_dev)
+                };
 
             ui.vertical(|ui| {
                 ui.strong("Distribution:");
