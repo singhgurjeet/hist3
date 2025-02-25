@@ -322,7 +322,7 @@ impl eframe::App for GraphVisualizerApp {
                     .filter_map(|&idx| graph.node_weight(idx).cloned())
                     .collect();
                 if !names.is_empty() {
-                    ctx.output_mut(|o| o.copied_text = names.join("\t"));
+                    ctx.copy_text(names.join("\n"));
                 }
             });
         });
