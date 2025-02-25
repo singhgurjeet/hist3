@@ -6,7 +6,7 @@ use atty::Stream;
 use clap::Parser;
 use eframe::egui;
 use egui::Color32;
-use egui_plot::{CoordinatesFormatter, Corner, Plot, Points};
+use egui_plot::{Bar, BarChart, CoordinatesFormatter, Corner, Legend, Plot, Points, VLine};
 use hist3::data::InputSource;
 use hist3::NUMERIC_REGEX;
 use std::fs::File;
@@ -15,6 +15,15 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::thread;
+
+mod colors {
+    use eframe::egui::Color32;
+
+    pub const PERCENTILE_25_COLOR: Color32 = Color32::from_rgb(77, 77, 255);
+    pub const PERCENTILE_50_COLOR: Color32 = Color32::from_rgb(77, 255, 77);
+    pub const PERCENTILE_75_COLOR: Color32 = Color32::from_rgb(255, 77, 77);
+    pub const DEFAULT_BAR_COLOR: Color32 = Color32::from_rgb(75, 75, 75);
+}
 
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about)]
@@ -106,6 +115,7 @@ struct MainApp {
     data: Arc<Mutex<Vec<Vec<f64>>>>,
     filters: Vec<(f64, f64, f64, f64)>,
     scatter_plots: Vec<(bool, Arc<Mutex<ScatterSettings>>)>, // (is_open, settings)
+    histograms: Vec<(bool, Arc<Mutex<HistogramSettings>>)>,  // (is_open, settings)
 }
 
 #[derive(Clone)]
@@ -114,6 +124,12 @@ struct ScatterSettings {
     y_col: usize,
     color_col: Option<usize>,
     size_col: Option<usize>,
+}
+
+#[derive(Clone)]
+struct HistogramSettings {
+    column: usize,
+    bins: usize,
 }
 
 impl Default for ScatterSettings {
@@ -127,12 +143,22 @@ impl Default for ScatterSettings {
     }
 }
 
+impl Default for HistogramSettings {
+    fn default() -> Self {
+        Self {
+            column: 0,
+            bins: 20,
+        }
+    }
+}
+
 impl Default for MainApp {
     fn default() -> Self {
         Self {
             data: Arc::new(Mutex::new(Vec::new())),
             filters: Vec::new(),
             scatter_plots: Vec::new(),
+            histograms: Vec::new(),
         }
     }
 }
@@ -158,21 +184,15 @@ impl eframe::App for MainApp {
             }
         }
 
-        // Show the side panel with filters
         self.show_main_panel(ctx);
 
-        // Show central panel with button
-        // self.show_central_panel(ctx);
-
-        // We don't need to calculate filtered data here since each window computes it
-
         // Handle scatter plot windows
-        let mut to_remove = Vec::new();
+        let mut scatter_to_remove = Vec::new();
 
-        // First handle existing windows
+        // First handle existing scatter plot windows
         for (i, (is_open, settings)) in self.scatter_plots.iter_mut().enumerate() {
             if !*is_open {
-                to_remove.push(i);
+                scatter_to_remove.push(i);
                 continue;
             }
 
@@ -231,9 +251,84 @@ impl eframe::App for MainApp {
             );
         }
 
+        // Handle histogram windows
+        let mut histogram_to_remove = Vec::new();
+
+        // Handle existing histogram windows
+        for (i, (is_open, settings)) in self.histograms.iter_mut().enumerate() {
+            if !*is_open {
+                histogram_to_remove.push(i);
+                continue;
+            }
+
+            // Create a unique ID for each window
+            let viewport_id = egui::ViewportId::from_hash_of(&format!("histogram_{}", i));
+            let window_title = format!("Histogram {}", i + 1);
+
+            // Clone the shared references for the window
+            let settings_arc = settings.clone();
+            let data_arc = self.data.clone();
+            let filters = self.filters.clone();
+
+            // Show the window using immediate viewport
+            ctx.show_viewport_immediate(
+                viewport_id,
+                egui::ViewportBuilder::default()
+                    .with_title(window_title)
+                    .with_inner_size([900.0, 700.0]),
+                move |ctx, _| {
+                    // This closure runs every frame for the viewport
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        // Get the filtered data based on the shared filters
+                        let filtered_data = {
+                            let data = data_arc.lock().unwrap();
+                            data.iter()
+                                .filter_map(|row| {
+                                    if row.iter().enumerate().all(|(i, val)| {
+                                        i < filters.len()
+                                            && *val >= filters[i].2
+                                            && *val <= filters[i].3
+                                    }) {
+                                        Some(row.clone())
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect::<Vec<_>>()
+                        };
+
+                        // Grab the lock only for the UI part
+                        if let Ok(mut settings) = settings_arc.lock() {
+                            // Use an area with scrolling to ensure controls and plot fit
+                            egui::ScrollArea::vertical()
+                                .max_height(f32::INFINITY)
+                                .show(ui, |ui| {
+                                    Self::show_histogram(
+                                        ui,
+                                        &filtered_data,
+                                        &filters,
+                                        &mut settings,
+                                    );
+                                });
+                        } else {
+                            ui.label("Settings currently unavailable");
+                        }
+                    });
+
+                    // Ensure continuous rendering
+                    ctx.request_repaint();
+                },
+            );
+        }
+
         // Remove any closed plots
-        for &idx in to_remove.iter().rev() {
+        for &idx in scatter_to_remove.iter().rev() {
             self.scatter_plots.swap_remove(idx);
+        }
+
+        // Remove any closed histograms
+        for &idx in histogram_to_remove.iter().rev() {
+            self.histograms.swap_remove(idx);
         }
     }
 }
@@ -279,9 +374,13 @@ impl MainApp {
                     self.open_new_scatter_plot();
                 }
 
+                if ui.button("Create Histogram").clicked() {
+                    self.open_new_histogram();
+                }
+
                 ui.add_space(10.0);
 
-                if !self.scatter_plots.is_empty() {
+                if !self.scatter_plots.is_empty() || !self.histograms.is_empty() {
                     ui.separator();
                     ui.heading("Active Plots");
                     ui.add_space(5.0);
@@ -295,10 +394,17 @@ impl MainApp {
                         }
                     }
 
+                    for (i, (is_open, _)) in self.histograms.iter().enumerate() {
+                        if *is_open {
+                            ui.horizontal(|ui| {
+                                ui.label(format!("• Histogram {}", i + 1));
+                                ui.label("(in separate window)");
+                            });
+                        }
+                    }
+
                     ui.add_space(5.0);
-                    ui.label(
-                        "Note: Each scatter plot window updates automatically with filter changes.",
-                    );
+                    ui.label("Note: All plot windows update automatically with filter changes.");
                 }
             } else {
                 ui.horizontal_centered(|ui| {
@@ -315,6 +421,14 @@ impl MainApp {
 
         // Add to our list of plots
         self.scatter_plots.push((true, settings));
+    }
+
+    fn open_new_histogram(&mut self) {
+        // Create default settings for the new histogram
+        let settings = Arc::new(Mutex::new(HistogramSettings::default()));
+
+        // Add to our list of histograms
+        self.histograms.push((true, settings));
     }
 
     fn show_scatter_plot(ui: &mut egui::Ui, data: &[Vec<f64>], settings: &mut ScatterSettings) {
@@ -592,5 +706,183 @@ impl MainApp {
                 }
             })
             .collect()
+    }
+
+    fn show_histogram(
+        ui: &mut egui::Ui,
+        data: &[Vec<f64>],
+        filters: &Vec<(f64, f64, f64, f64)>,
+        settings: &mut HistogramSettings,
+    ) {
+        if data.is_empty() {
+            ui.label("No data to display");
+            return;
+        }
+
+        // Show column selector and bin count at the top
+        ui.add_space(10.0);
+
+        ui.horizontal(|ui| {
+            // Column dropdown
+            ui.label("Column:");
+            ui.add_space(2.0);
+
+            let column_count = data.first().map_or(0, |row| row.len());
+            let col_items = (0..column_count).map(|i| i.to_string()).collect::<Vec<_>>();
+
+            let mut column = Some(settings.column);
+            egui::ComboBox::new("histogram_column_combo", "")
+                .selected_text(column.map_or("None".into(), |col| col.to_string()))
+                .width(80.0)
+                .show_ui(ui, |ui| {
+                    for (i, item) in col_items.iter().enumerate() {
+                        ui.selectable_value(&mut column, Some(i), item);
+                    }
+                });
+            if let Some(col) = column {
+                settings.column = col;
+            }
+
+            ui.add_space(20.0);
+
+            // Number of bins slider
+            ui.label("Bins:");
+            ui.add_space(2.0);
+            ui.add(egui::Slider::new(&mut settings.bins, 5..=100).text(""));
+        });
+
+        ui.add_space(10.0);
+        ui.separator();
+
+        // Extract data for selected column
+        let column_data: Vec<f64> = data
+            .iter()
+            .filter_map(|row| row.get(settings.column).copied())
+            .collect();
+
+        if column_data.is_empty() {
+            ui.label("No data available for selected column");
+            return;
+        }
+
+        // Calculate histogram bins
+        let min_value = filters[settings.column].2;
+        let max_value = filters[settings.column].3;
+        let range = max_value - min_value;
+        let bin_width = range / settings.bins as f64;
+
+        // Count values in each bin
+        let mut bin_counts = vec![0; settings.bins];
+        for &value in &column_data {
+            let bin_index = ((value - min_value) / bin_width).floor() as usize;
+            let clamped_index = bin_index.min(settings.bins - 1);
+            bin_counts[clamped_index] += 1;
+        }
+
+        // Calculate percentiles (25th, 50th, 75th)
+        let mut sorted_data = column_data.clone();
+        sorted_data.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+        let p25_index = (sorted_data.len() as f64 * 0.25) as usize;
+        let p50_index = (sorted_data.len() as f64 * 0.5) as usize;
+        let p75_index = (sorted_data.len() as f64 * 0.75) as usize;
+
+        let p25 = sorted_data.get(p25_index).copied();
+        let p50 = sorted_data.get(p50_index).copied();
+        let p75 = sorted_data.get(p75_index).copied();
+
+        // Create bar chart data
+        let bars: Vec<Bar> = bin_counts
+            .iter()
+            .enumerate()
+            .map(|(i, &count)| {
+                let bin_start = min_value + i as f64 * bin_width;
+                let bin_center = bin_start + bin_width / 2.0;
+
+                Bar::new(bin_center, count as f64)
+                    .width(bin_width * 0.95)
+                    .fill(colors::DEFAULT_BAR_COLOR)
+                    .name(format!("{:.2} - {:.2}", bin_start, bin_start + bin_width))
+            })
+            .collect();
+
+        let chart = BarChart::new(bars);
+
+        // Create and show the plot
+        let column_name = format!("Column {}", settings.column);
+
+        Plot::new(format!("Histogram of {}", column_name))
+            .legend(Legend::default())
+            .show_grid(true)
+            .show_axes(true)
+            .allow_boxed_zoom(true)
+            .allow_drag(true)
+            .x_axis_label(column_name)
+            .y_axis_label("Count")
+            .show(ui, |plot_ui| {
+                plot_ui.bar_chart(chart);
+
+                // Show percentile lines
+                if let Some(x) = p25 {
+                    plot_ui.vline(
+                        VLine::new(x)
+                            .color(colors::PERCENTILE_25_COLOR)
+                            .name(format!("25th percentile: {:.4}", x)),
+                    );
+                }
+
+                if let Some(x) = p50 {
+                    plot_ui.vline(
+                        VLine::new(x)
+                            .color(colors::PERCENTILE_50_COLOR)
+                            .name(format!("50th percentile: {:.4}", x)),
+                    );
+                }
+
+                if let Some(x) = p75 {
+                    plot_ui.vline(
+                        VLine::new(x)
+                            .color(colors::PERCENTILE_75_COLOR)
+                            .name(format!("75th percentile: {:.4}", x)),
+                    );
+                }
+            });
+
+        // Show statistics
+        ui.separator();
+        ui.add_space(5.0);
+
+        ui.horizontal(|ui| {
+            ui.vertical(|ui| {
+                ui.strong("Statistics:");
+                ui.label(format!("Count: {}", column_data.len()));
+                ui.label(format!("Min: {:.4}", min_value));
+                ui.label(format!("Max: {:.4}", max_value));
+            });
+
+            ui.add_space(40.0);
+
+            ui.vertical(|ui| {
+                ui.strong("Percentiles:");
+                ui.label(format!("25th: {:.4}", p25.unwrap_or(f64::NAN)));
+                ui.label(format!("50th: {:.4}", p50.unwrap_or(f64::NAN)));
+                ui.label(format!("75th: {:.4}", p75.unwrap_or(f64::NAN)));
+            });
+
+            ui.add_space(40.0);
+
+            // Calculate mean and standard deviation
+            let mean = column_data.iter().sum::<f64>() / column_data.len() as f64;
+            let variance = column_data.iter().map(|&x| (x - mean).powi(2)).sum::<f64>()
+                / column_data.len() as f64;
+            let std_dev = variance.sqrt();
+
+            ui.vertical(|ui| {
+                ui.strong("Distribution:");
+                ui.label(format!("Mean: {:.4}", mean));
+                ui.label(format!("Std Dev: {:.4}", std_dev));
+                ui.label(format!("Range: {:.4}", range));
+            });
+        });
     }
 }
