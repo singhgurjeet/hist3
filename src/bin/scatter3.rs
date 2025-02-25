@@ -214,11 +214,45 @@ impl ScatterApp {
 
             ui.separator();
             ui.heading("Filters");
+
+            // Create a copy of filters to avoid mutable borrow issues
+            let filters_copy = self.filters.clone();
+
             for (i, filter) in self.filters.iter_mut().enumerate() {
-                ui.label(format!("Column {} Range", i));
+                ui.strong(format!("Column {}", i));
                 let range = filter.0..=filter.1;
                 ui.add(egui::widgets::Slider::new(&mut filter.2, range.clone()).text("min"));
                 ui.add(egui::widgets::Slider::new(&mut filter.3, range).text("max"));
+
+                // Calculate mean and std for this column with filters applied
+                let data = self.data.lock().unwrap();
+                let values: Vec<f64> = data
+                    .iter()
+                    .filter(|row| {
+                        row.iter().enumerate().all(|(col_idx, val)| {
+                            if col_idx < filters_copy.len() {
+                                *val >= filters_copy[col_idx].2 && *val <= filters_copy[col_idx].3
+                            } else {
+                                true
+                            }
+                        })
+                    })
+                    .filter_map(|row| row.get(i))
+                    .cloned()
+                    .collect();
+
+                if !values.is_empty() {
+                    let mean = values.iter().sum::<f64>() / values.len() as f64;
+                    let std = (values.iter().map(|x| (x - mean).powi(2)).sum::<f64>()
+                        / values.len() as f64)
+                        .sqrt();
+
+                    ui.label(format!("Mean: {:.2}", mean));
+                    ui.label(format!("Std: {:.2}", std));
+                } else {
+                    ui.label("Mean: N/A");
+                    ui.label("Std: N/A");
+                }
                 ui.separator();
             }
         });
