@@ -412,6 +412,16 @@ impl MainApp {
             });
             ui.add_space(10.0);
 
+            if ui.button("Create New Scatter Plot").clicked() {
+                self.open_new_scatter_plot();
+            }
+
+            if ui.button("Create Histogram").clicked() {
+                self.open_new_histogram();
+            }
+
+            ui.add_space(10.0);
+
             ui.heading("Filters");
             let column_count = {
                 let data = self.data.lock().unwrap();
@@ -422,27 +432,19 @@ impl MainApp {
                 ui.separator();
                 let stats = self.compute_statistics();
 
-                for (i, filter) in self.filters.iter_mut().enumerate() {
-                    ui.strong(format!("Column {}", i));
-                    let range = filter.0..=filter.1;
-                    ui.add(egui::widgets::Slider::new(&mut filter.2, range.clone()).text("min"));
-                    ui.add(egui::widgets::Slider::new(&mut filter.3, range).text("max"));
-                    ui.label(format!("Average: {:.2}", stats[i].0));
-                    ui.label(format!("Std Dev: {:.2}", stats[i].1));
-                    ui.separator();
-                }
-
-                ui.add_space(20.0);
-
-                if ui.button("Create New Scatter Plot").clicked() {
-                    self.open_new_scatter_plot();
-                }
-
-                if ui.button("Create Histogram").clicked() {
-                    self.open_new_histogram();
-                }
-
-                ui.add_space(10.0);
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    for (i, filter) in self.filters.iter_mut().enumerate() {
+                        ui.strong(format!("Column {}", i));
+                        let range = filter.0..=filter.1;
+                        ui.add(
+                            egui::widgets::Slider::new(&mut filter.2, range.clone()).text("min"),
+                        );
+                        ui.add(egui::widgets::Slider::new(&mut filter.3, range).text("max"));
+                        ui.label(format!("Average: {:.2}", stats[i].0));
+                        ui.label(format!("Std Dev: {:.2}", stats[i].1));
+                        ui.separator();
+                    }
+                });
             } else {
                 ui.horizontal_centered(|ui| {
                     ui.add(egui::Spinner::new());
