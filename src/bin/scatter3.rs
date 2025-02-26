@@ -224,9 +224,19 @@ impl eframe::App for ScatterApp {
 
         self.show_central_panel(ctx, plot_data, color_array, size_array);
 
-        // Request a redraw only if needed
-        let data_size = self.data.read().unwrap().len();
-        if data_size > 0 {
+        // Only request a repaint if we're still processing data
+        let is_loading = {
+            let data_read_guard = self.data.read().unwrap();
+            // Check if we received new data since last frame
+            let current_data_size = data_read_guard.len();
+            static mut LAST_DATA_SIZE: usize = 0;
+            let last_size = unsafe { LAST_DATA_SIZE };
+            let data_growing = current_data_size > last_size;
+            unsafe { LAST_DATA_SIZE = current_data_size; }
+            data_growing && current_data_size > 0
+        };
+        
+        if is_loading {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }
     }
@@ -368,6 +378,11 @@ impl ScatterApp {
                     if old_min != filter.2 || old_max != filter.3 {
                         *data_changed = true;
                         self.statistics.remove(&i); // Invalidate statistics
+                        
+                        // Also invalidate color and size caches when filters change
+                        // so they're recalculated based on filtered data
+                        self.color_cache.clear();
+                        self.size_cache.clear();
                     }
 
                     // Use cached statistics
@@ -406,12 +421,20 @@ impl ScatterApp {
                 let mut min_value = f64::INFINITY;
                 let mut max_value = f64::NEG_INFINITY;
 
-                // First pass - find min/max
+                // First pass - find min/max while respecting filters
                 for row in data.iter() {
-                    if let Some(&val) = row.get(col) {
-                        min_value = min_value.min(val);
-                        max_value = max_value.max(val);
-                        values.push(val);
+                    // Skip rows that don't pass the filter
+                    let passes_filter = row.iter().enumerate().take(self.filters.len()).all(|(i, val)| {
+                        let filter = &self.filters[i];
+                        *val >= filter.2 && *val <= filter.3
+                    });
+                    
+                    if passes_filter {
+                        if let Some(&val) = row.get(col) {
+                            min_value = min_value.min(val);
+                            max_value = max_value.max(val);
+                            values.push(val);
+                        }
                     }
                 }
 
@@ -445,12 +468,20 @@ impl ScatterApp {
                 let mut min_value = f64::INFINITY;
                 let mut max_value = f64::NEG_INFINITY;
 
-                // First pass - find min/max
+                // First pass - find min/max while respecting filters
                 for row in data.iter() {
-                    if let Some(&val) = row.get(col) {
-                        min_value = min_value.min(val);
-                        max_value = max_value.max(val);
-                        values.push(val);
+                    // Skip rows that don't pass the filter
+                    let passes_filter = row.iter().enumerate().take(self.filters.len()).all(|(i, val)| {
+                        let filter = &self.filters[i];
+                        *val >= filter.2 && *val <= filter.3
+                    });
+                    
+                    if passes_filter {
+                        if let Some(&val) = row.get(col) {
+                            min_value = min_value.min(val);
+                            max_value = max_value.max(val);
+                            values.push(val);
+                        }
                     }
                 }
 
