@@ -1,3 +1,4 @@
+#!/usr/bin/env rust
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
 extern crate egui_plot;
@@ -559,6 +560,9 @@ impl MainApp {
         ui.separator();
 
         // Update color and size arrays
+        // The generate_visual_array function already uses filtered data for normalization
+        // when filters change, the data parameter contains only filtered rows
+        // so color and size mappings are automatically recalculated
         let color_array = if let Some(col) = settings.color_col {
             Self::generate_visual_array(data, col, |norm_value| {
                 let r = (255.0 * norm_value).round() as u8;
@@ -711,6 +715,7 @@ impl MainApp {
         F: Fn(f64) -> Output,
     {
         // Find min and max in one pass to avoid creating intermediaries
+        // This only considers currently filtered data
         let (min_value, max_value, has_data) = data.iter().filter_map(|row| row.get(column)).fold(
             (f64::INFINITY, f64::NEG_INFINITY, false),
             |(min, max, _), &val| (min.min(val), max.max(val), true),
