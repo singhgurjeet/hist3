@@ -93,28 +93,46 @@ fn process_reader<R: BufRead>(reader: R, data_ref: &Arc<Mutex<Vec<Vec<f64>>>>) {
 
     for line in reader.lines() {
         if let Ok(line) = line {
-            // More efficient numeric extraction - using split instead of regex for simple cases
-            let values: Vec<&str> = line
-                .split(|c| {
-                    !char::is_numeric(c) && c != '.' && c != '-' && c != '+' && c != 'e' && c != 'E'
-                })
-                .filter(|s| !s.is_empty())
-                .collect();
+            // Extract all numeric patterns that could be valid numbers
+            let mut values = Vec::new();
+            let mut start_idx = None;
 
-            let is_valid_line = first_line_size.map_or(true, |size| values.len() == size);
+            // Scan the line character by character to identify number patterns
+            for (i, c) in line.char_indices() {
+                let is_num_char =
+                    c.is_numeric() || c == '.' || c == '-' || c == '+' || c == 'e' || c == 'E';
 
-            if is_valid_line {
-                let floats = values
-                    .iter()
-                    .filter_map(|s| f64::from_str(s).ok())
-                    .collect::<Vec<_>>();
+                if is_num_char && start_idx.is_none() {
+                    // Start of a new number
+                    start_idx = Some(i);
+                } else if !is_num_char && start_idx.is_some() {
+                    // End of a number - extract the substring
+                    let start = start_idx.unwrap();
+                    values.push(&line[start..i]);
+                    start_idx = None;
+                }
+            }
 
+            // Handle case where the line ends with a number
+            if let Some(start) = start_idx {
+                values.push(&line[start..]);
+            }
+
+            // Parse all extracted strings into numbers, filtering out failures
+            let floats = values
+                .into_iter()
+                .filter_map(|s| f64::from_str(s).ok())
+                .collect::<Vec<_>>();
+
+            // Check if the number of values matches the size of the first line
+            // Also ensure we actually parsed some numbers
+            if !floats.is_empty() {
                 if first_line_size.is_none() {
                     first_line_size = Some(floats.len());
+                    batch.push(floats);
+                } else if floats.len() == first_line_size.unwrap() {
+                    batch.push(floats);
                 }
-
-                // Add to the batch instead of locking for each row
-                batch.push(floats);
 
                 // Only lock the mutex when we have a full batch
                 if batch.len() >= BATCH_SIZE {
