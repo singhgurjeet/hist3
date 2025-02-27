@@ -936,54 +936,54 @@ impl MainApp {
                 }
             });
 
-        // Show statistics
-        ui.separator();
-        ui.add_space(5.0);
+        // // // Show statistics
+        // // ui.separator();
+        // // ui.add_space(5.0);
 
-        ui.horizontal(|ui| {
-            ui.vertical(|ui| {
-                ui.strong("Statistics:");
-                ui.label(format!("Count: {}", column_data.len()));
-                ui.label(format!("Min: {:.4}", min_value));
-                ui.label(format!("Max: {:.4}", max_value));
-            });
+        // // ui.horizontal(|ui| {
+        // //     ui.vertical(|ui| {
+        // //         ui.strong("Statistics:");
+        // //         ui.label(format!("Count: {}", column_data.len()));
+        // //         ui.label(format!("Min: {:.4}", min_value));
+        // //         ui.label(format!("Max: {:.4}", max_value));
+        // //     });
 
-            ui.add_space(40.0);
+        // //     ui.add_space(40.0);
 
-            ui.vertical(|ui| {
-                ui.strong("Percentiles:");
-                ui.label(format!("25th: {:.4}", p25.unwrap_or(f64::NAN)));
-                ui.label(format!("50th: {:.4}", p50.unwrap_or(f64::NAN)));
-                ui.label(format!("75th: {:.4}", p75.unwrap_or(f64::NAN)));
-            });
+        // //     ui.vertical(|ui| {
+        // //         ui.strong("Percentiles:");
+        // //         ui.label(format!("25th: {:.4}", p25.unwrap_or(f64::NAN)));
+        // //         ui.label(format!("50th: {:.4}", p50.unwrap_or(f64::NAN)));
+        // //         ui.label(format!("75th: {:.4}", p75.unwrap_or(f64::NAN)));
+        // //     });
 
-            ui.add_space(40.0);
+        // //     ui.add_space(40.0);
 
-            // Use cached statistics if available and data hasn't changed
-            let (mean, std_dev) =
-                if settings.last_data_version != _data_version || settings.cached_stats.is_none() {
-                    // Calculate statistics and cache them
-                    let mean = column_data.iter().sum::<f64>() / column_data.len() as f64;
-                    let variance = column_data.iter().map(|&x| (x - mean).powi(2)).sum::<f64>()
-                        / column_data.len() as f64;
-                    let std_dev = variance.sqrt();
+        // //     // Use cached statistics if available and data hasn't changed
+        // //     let (mean, std_dev) =
+        // //         if settings.last_data_version != _data_version || settings.cached_stats.is_none() {
+        // //             // Calculate statistics and cache them
+        // //             let mean = column_data.iter().sum::<f64>() / column_data.len() as f64;
+        // //             let variance = column_data.iter().map(|&x| (x - mean).powi(2)).sum::<f64>()
+        // //                 / column_data.len() as f64;
+        // //             let std_dev = variance.sqrt();
 
-                    settings.cached_stats = Some((mean, variance, std_dev));
-                    settings.last_data_version = _data_version;
+        // //             settings.cached_stats = Some((mean, variance, std_dev));
+        // //             settings.last_data_version = _data_version;
 
-                    (mean, std_dev)
-                } else {
-                    // Use cached values
-                    let (mean, _variance, std_dev) = settings.cached_stats.unwrap();
-                    (mean, std_dev)
-                };
+        // //             (mean, std_dev)
+        // //         } else {
+        // //             // Use cached values
+        // //             let (mean, _variance, std_dev) = settings.cached_stats.unwrap();
+        // //             (mean, std_dev)
+        // //         };
 
-            ui.vertical(|ui| {
-                ui.strong("Distribution:");
-                ui.label(format!("Mean: {:.4}", mean));
-                ui.label(format!("Std Dev: {:.4}", std_dev));
-                ui.label(format!("Range: {:.4}", range));
-            });
-        });
+        // //     ui.vertical(|ui| {
+        // //         ui.strong("Distribution:");
+        // //         ui.label(format!("Mean: {:.4}", mean));
+        // //         ui.label(format!("Std Dev: {:.4}", std_dev));
+        // //         ui.label(format!("Range: {:.4}", range));
+        // //     });
+        // });
     }
 }
