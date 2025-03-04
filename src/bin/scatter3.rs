@@ -8,10 +8,9 @@ use eframe::egui;
 use egui::Color32;
 use egui_plot::{CoordinatesFormatter, Corner, Plot, Points};
 use hist3::data::InputSource;
-use hist3::NUMERIC_REGEX;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{self, BufRead};
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
@@ -76,48 +75,74 @@ fn process_input(input: InputSource, data_ref: &Arc<RwLock<Vec<Vec<f64>>>>) {
         }
         InputSource::FileName(file_name) => {
             let file = File::open(file_name).unwrap();
-            let reader = BufReader::with_capacity(65536, file); // Use larger buffer for better performance
+            let reader = io::BufReader::new(file);
             process_reader(reader, data_ref);
         }
     };
 }
 
-fn process_reader<R: BufRead>(mut reader: R, data_ref: &Arc<RwLock<Vec<Vec<f64>>>>) {
+fn process_reader<R: BufRead>(reader: R, data_ref: &Arc<RwLock<Vec<Vec<f64>>>>) {
     let mut first_line_size = None;
-    let mut line = String::with_capacity(1024); // Pre-allocate line buffer
-    let mut batch = Vec::with_capacity(1000); // Collect in batches to reduce lock contention
+    let mut batch = Vec::new();
+    const BATCH_SIZE: usize = 1000;
 
-    while reader.read_line(&mut line).unwrap_or(0) > 0 {
-        let count = NUMERIC_REGEX.captures_iter(&line).count();
-        let is_valid_line = first_line_size.map_or(true, |size| count == size);
+    for line in reader.lines() {
+        if let Ok(line) = line {
+            // Extract all numeric patterns that could be valid numbers
+            let mut values = Vec::new();
+            let mut start_idx = None;
 
-        if is_valid_line {
-            let floats = NUMERIC_REGEX
-                .captures_iter(&line)
-                .map(|cap| f64::from_str(&cap[0]).unwrap())
+            // Scan the line character by character to identify number patterns
+            for (i, c) in line.char_indices() {
+                let is_num_char =
+                    c.is_numeric() || c == '.' || c == '-' || c == '+' || c == 'e' || c == 'E';
+
+                if is_num_char && start_idx.is_none() {
+                    // Start of a new number
+                    start_idx = Some(i);
+                } else if !is_num_char && start_idx.is_some() {
+                    // End of a number - extract the substring
+                    let start = start_idx.unwrap();
+                    values.push(&line[start..i]);
+                    start_idx = None;
+                }
+            }
+
+            // Handle case where the line ends with a number
+            if let Some(start) = start_idx {
+                values.push(&line[start..]);
+            }
+
+            // Parse all extracted strings into numbers, filtering out failures
+            let floats = values
+                .into_iter()
+                .filter_map(|s| f64::from_str(s).ok())
                 .collect::<Vec<_>>();
 
-            if first_line_size.is_none() {
-                first_line_size = Some(floats.len());
-            }
-
-            batch.push(floats);
-
-            // Write batch when it reaches capacity
-            if batch.len() >= 1000 {
-                if let Ok(mut data) = data_ref.write() {
-                    data.append(&mut batch);
+            // Check if the number of values matches the size of the first line
+            // Also ensure we actually parsed some numbers
+            if !floats.is_empty() {
+                if first_line_size.is_none() {
+                    first_line_size = Some(floats.len());
+                    batch.push(floats);
+                } else if floats.len() == first_line_size.unwrap() {
+                    batch.push(floats);
                 }
-                batch = Vec::with_capacity(1000);
+
+                // Only lock the mutex when we have a full batch
+                if batch.len() >= BATCH_SIZE {
+                    if let Ok(mut data) = data_ref.write() {
+                        data.extend(batch.drain(..));
+                    }
+                }
             }
         }
-        line.clear(); // Reuse the string buffer
     }
 
-    // Add any remaining items
+    // Don't forget any remaining rows
     if !batch.is_empty() {
         if let Ok(mut data) = data_ref.write() {
-            data.append(&mut batch);
+            data.extend(batch);
         }
     }
 }
